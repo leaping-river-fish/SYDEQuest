@@ -11,7 +11,9 @@ endif()
 project(platformer CXX)
 set(CMAKE_CXX_STANDARD 17)
 
-# Game sources (platform-independent)
+# ---------------------------
+# Platform-independent game sources
+# ---------------------------
 set(GAME_SOURCES
     src/game/Game.cpp
     src/game/player/Player.cpp
@@ -22,8 +24,10 @@ set(GAME_SOURCES
     src/game/level/Camera.cpp
 )
 
+# ---------------------------
+# Desktop build
+# ---------------------------
 if(TARGET_PLATFORM STREQUAL "desktop")
-    # Desktop build
     find_package(SDL2 REQUIRED)
     
     add_executable(platformer
@@ -40,10 +44,12 @@ if(TARGET_PLATFORM STREQUAL "desktop")
         ${SDL2_INCLUDE_DIRS}
     )
     
-    target_link_libraries(platformer ${SDL2_LIBRARIES})
-    
+    target_link_libraries(platformer PRIVATE ${SDL2_LIBRARIES})
+
+# ---------------------------
+# Pico build (future)
+# ---------------------------
 elseif(TARGET_PLATFORM STREQUAL "pico")
-    # Pico build (future)
     pico_sdk_init()
     
     add_executable(platformer
@@ -56,3 +62,4 @@ elseif(TARGET_PLATFORM STREQUAL "pico")
     target_link_libraries(platformer pico_stdlib)
     pico_add_extra_outputs(platformer)
 endif()
+
