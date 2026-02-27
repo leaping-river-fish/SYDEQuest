@@ -6,7 +6,7 @@ public:
     static constexpr float WIDTH = 14.0f;
     static constexpr float HEIGHT = 22.0f;
     static constexpr float MOVE_SPEED = 150.0f;
-    static constexpr float JUMP_VELOCITY = -400.0f;
+    static constexpr float JUMP_VELOCITY = -437.0f;  // Jump height: exactly 5 tiles (80 pixels)
     
     Vec2 position;
     Vec2 velocity;

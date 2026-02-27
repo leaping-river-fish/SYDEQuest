@@ -39,14 +39,26 @@ void DesktopRenderer::drawTile(int tileX, int tileY, int tileType,
     if (tileType == 0) return;  // Don't draw air
     
     const int TILE_SIZE = 16;
-    Rect rect(
-        tileX * TILE_SIZE - cameraOffsetX,
-        tileY * TILE_SIZE - cameraOffsetY,
-        TILE_SIZE,
-        TILE_SIZE
-    );
+    const int PLATFORM_HEIGHT = 8;  // Platforms are half-height
     
-    drawRect(rect, getTileColor(tileType), true);
+    // Platforms are drawn thinner and positioned at the bottom of the tile
+    if (tileType == 2) {  // Platform type
+        Rect rect(
+            tileX * TILE_SIZE - cameraOffsetX,
+            tileY * TILE_SIZE + (TILE_SIZE - PLATFORM_HEIGHT) - cameraOffsetY,
+            TILE_SIZE,
+            PLATFORM_HEIGHT
+        );
+        drawRect(rect, getTileColor(tileType), true);
+    } else {  // Solid tiles
+        Rect rect(
+            tileX * TILE_SIZE - cameraOffsetX,
+            tileY * TILE_SIZE - cameraOffsetY,
+            TILE_SIZE,
+            TILE_SIZE
+        );
+        drawRect(rect, getTileColor(tileType), true);
+    }
 }
 
 Color DesktopRenderer::getTileColor(int tileType) {

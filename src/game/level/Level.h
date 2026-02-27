@@ -12,6 +12,7 @@ public:
     static constexpr int WIDTH = 64;
     static constexpr int HEIGHT = 32;
     static constexpr int TILE_SIZE = 16;
+    static constexpr int PLATFORM_HEIGHT = 8;  // Platforms are half-height
 
     Level();
 

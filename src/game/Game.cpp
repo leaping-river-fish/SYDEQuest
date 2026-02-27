@@ -22,7 +22,7 @@ void Game::update() {
     float dt = timer->getDeltaTime();
     
     // Input player actions
-    controller.update(player, input);
+    controller.update(player, input, dt);
     
     // Physics
     physics.applyGravity(player, dt);

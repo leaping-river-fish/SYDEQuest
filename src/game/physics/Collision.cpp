@@ -37,7 +37,8 @@ void Collision::resolveVertical(Player& player, const Level& level) {
             
             // Check one-way platforms (only from above)
             if (level.isPlatform(x, bottomTile) && !player.wantsToDropThrough) {
-                float platformTop = bottomTile * tileSize;
+                // Platforms are half-height (8 pixels), positioned at top of tile
+                float platformTop = bottomTile * tileSize + (tileSize - level.PLATFORM_HEIGHT);
                 float playerBottom = collider.y + collider.height;
                 float prevPlayerBottom = playerBottom - player.velocity.y * 0.016f;  // Approx prev frame
                 
@@ -45,6 +46,7 @@ void Collision::resolveVertical(Player& player, const Level& level) {
                     player.position.y = platformTop - collider.height;
                     player.velocity.y = 0;
                     player.isGrounded = true;
+                    player.wantsToDropThrough = false;  // Reset flag when landing on platform
                     return;
                 }
             }

@@ -10,9 +10,9 @@ enum class Button {
 
 class IInput {
 public:
-    virtual ~IInput() = 0;
+    virtual ~IInput() = default;
 
-    virtual void Update() = 0;
+    virtual void update() = 0;
     virtual bool isPressed(Button button) const = 0;
     virtual bool wasJustPressed(Button button) const = 0;
     virtual bool wasJustReleased(Button button) const = 0;

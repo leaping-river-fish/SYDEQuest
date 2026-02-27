@@ -2,7 +2,7 @@
 
 Level::Level() {
     // initialize all tiles to air
-    for (int y = 0; y < HEIGHTl y++) {
+    for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             tiles[y][x] = TileType::Air;
         }
@@ -45,17 +45,17 @@ void Level::loadTestLevel() {
         tiles[y][WIDTH - 1] = TileType::Solid;
     }
     
-    // Some platforms
+    // Some platforms (all one-way)
     for (int x = 10; x < 20; x++) {
-        tiles[HEIGHT - 8][x] = TileType::Solid;
+        tiles[HEIGHT - 6][x] = TileType::Platform;
     }
     
     for (int x = 25; x < 35; x++) {
-        tiles[HEIGHT - 12][x] = TileType::Platform;  // One-way
+        tiles[HEIGHT - 10][x] = TileType::Platform;
     }
     
-    // Staircase
+    // Staircase (one-way platforms)
     for (int i = 0; i < 5; i++) {
-        tiles[HEIGHT - 3 - i][40 + i] = TileType::Solid;
+        tiles[HEIGHT - 3 - i][40 + i] = TileType::Platform;
     }
 }
