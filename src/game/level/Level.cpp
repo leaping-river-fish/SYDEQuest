@@ -53,6 +53,10 @@ void Level::loadTestLevel() {
     for (int x = 25; x < 35; x++) {
         tiles[HEIGHT - 10][x] = TileType::Platform;
     }
+
+    for (int x = 50; x < 60; x++) {
+        tiles[HEIGHT - 6][x] = TileType::Platform;
+    }
     
     // Staircase (one-way platforms)
     for (int i = 0; i < 5; i++) {

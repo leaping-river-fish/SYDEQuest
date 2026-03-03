@@ -10,9 +10,7 @@ Player::Player()
 }
 
 void Player::update(float deltaTime) {
-    // Apply velocity to position
-    position.x += velocity.x * deltaTime;
-    position.y += velocity.y * deltaTime;
+    // Animation and state updates only (no movement)
 }
 
 Rect Player::getCollider() const {

@@ -28,11 +28,17 @@ void Game::update() {
     physics.applyGravity(player, dt);
     physics.clampVelocity(player);
     
-    // Update player position
-    player.update(dt);
+    // Move X and resolve
+    player.position.x += player.velocity.x * dt;
+    collision.resolveHorizontal(player, level);
     
-    // Collision resolution
-    collision.resolvePlayerTileCollision(player, level);
+    // Move Y and resolve
+    player.isGrounded = false;
+    player.position.y += player.velocity.y * dt;
+    collision.resolveVertical(player, level);
+    
+    // Update animation/state
+    player.update(dt);
     
     // Camera follow
     camera.follow(player, level);

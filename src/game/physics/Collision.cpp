@@ -3,14 +3,6 @@
 #include "game/level/Level.h"
 #include <cmath>
 
-void Collision::resolvePlayerTileCollision(Player& player, const Level& level) {
-    player.isGrounded = false;
-    
-    // vertical first, then horizontal
-    resolveVertical(player, level);
-    resolveHorizontal(player, level);
-}
-
 // resolve vertical collisions
 
 void Collision::resolveVertical(Player& player, const Level& level) {
