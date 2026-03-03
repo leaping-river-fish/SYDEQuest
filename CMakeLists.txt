@@ -29,6 +29,7 @@ set(GAME_SOURCES
 # ---------------------------
 if(TARGET_PLATFORM STREQUAL "desktop")
     find_package(SDL2 REQUIRED)
+    find_package(SDL2_image REQUIRED)
     
     add_executable(platformer
         ${GAME_SOURCES}
@@ -44,7 +45,7 @@ if(TARGET_PLATFORM STREQUAL "desktop")
         ${SDL2_INCLUDE_DIRS}
     )
     
-    target_link_libraries(platformer PRIVATE ${SDL2_LIBRARIES})
+    target_link_libraries(platformer PRIVATE ${SDL2_LIBRARIES} SDL2_image::SDL2_image)
 
 # ---------------------------
 # Pico build (future)

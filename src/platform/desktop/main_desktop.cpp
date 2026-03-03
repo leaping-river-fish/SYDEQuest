@@ -1,4 +1,5 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include "game/Game.h"
 #include "DesktopRenderer.h"
 #include "DesktopInput.h"
@@ -8,6 +9,12 @@
 int main(int argc, char* argv[]) {
     // Init SDL
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        return 1;
+    }
+    
+    // Init SDL_image for PNG support
+    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+        SDL_Quit();
         return 1;
     }
     
@@ -52,6 +59,7 @@ int main(int argc, char* argv[]) {
     // Cleanup
     SDL_DestroyRenderer(sdlRenderer);
     SDL_DestroyWindow(window);
+    IMG_Quit();
     SDL_Quit();
     
     return 0;

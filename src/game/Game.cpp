@@ -6,13 +6,17 @@
 
 Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
     : renderer(r), input(i), haptics(h), timer(t),
-      camera(r->getScreenWidth(), r->getScreenHeight())
+      camera(r->getScreenWidth(), r->getScreenHeight()),
+      playerSpritesheet(-1)
 {
 }
 
 void Game::init() {
     // Position player at spawn point
     player.position = Vec2(100, 100);
+    
+    // Load player spritesheet
+    playerSpritesheet = renderer->loadTexture("../assets/AlternatingWalk.png");
 }
 
 void Game::update() {
@@ -60,11 +64,21 @@ void Game::render() {
         }
     }
     
-    // Draw player
-    Rect playerRect = player.getCollider();
-    playerRect.x -= camX;
-    playerRect.y -= camY;
-    renderer->drawRect(playerRect, Color(255, 0, 0), true);  // Red player
+    // Draw player sprite
+    Rect dstRect = player.getCollider();
+    dstRect.x -= camX;
+    dstRect.y -= camY;
+    
+    if (playerSpritesheet >= 0) {
+        int frameX = (player.currentFrame % 4) * 16;
+        int frameY = (player.currentFrame / 4) * 16;
+        Rect srcRect(frameX, frameY, 16, 16);
+        
+        renderer->drawSprite(playerSpritesheet, srcRect, dstRect, !player.facingRight);
+    } else {
+        // Fallback if texture fails to load
+        renderer->drawRect(dstRect, Color(255, 0, 0), true);
+    }
     
     renderer->endFrame();
 }

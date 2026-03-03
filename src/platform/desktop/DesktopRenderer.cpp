@@ -1,4 +1,5 @@
 #include "DesktopRenderer.h"
+#include <SDL2/SDL_image.h>
 
 DesktopRenderer::DesktopRenderer(SDL_Renderer* renderer, int w, int h)
     : renderer(renderer), screenWidth(w), screenHeight(h)
@@ -59,6 +60,46 @@ void DesktopRenderer::drawTile(int tileX, int tileY, int tileType,
         );
         drawRect(rect, getTileColor(tileType), true);
     }
+}
+
+int DesktopRenderer::loadTexture(const char* path) {
+    SDL_Surface* surface = IMG_Load(path);
+    if (!surface) {
+        return -1;
+    }
+    
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    
+    if (!texture) {
+        return -1;
+    }
+    
+    textures.push_back(texture);
+    return static_cast<int>(textures.size() - 1);
+}
+
+void DesktopRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) {
+    if (textureID < 0 || textureID >= static_cast<int>(textures.size())) {
+        return;
+    }
+    
+    SDL_Rect src = {
+        static_cast<int>(srcRect.x),
+        static_cast<int>(srcRect.y),
+        static_cast<int>(srcRect.width),
+        static_cast<int>(srcRect.height)
+    };
+    
+    SDL_Rect dst = {
+        static_cast<int>(dstRect.x),
+        static_cast<int>(dstRect.y),
+        static_cast<int>(dstRect.width),
+        static_cast<int>(dstRect.height)
+    };
+    
+    SDL_RendererFlip flip = flipHorizontal ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+    SDL_RenderCopyEx(renderer, textures[textureID], &src, &dst, 0.0, nullptr, flip);
 }
 
 Color DesktopRenderer::getTileColor(int tileType) {

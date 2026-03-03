@@ -13,6 +13,9 @@ public:
     virtual void drawTile(int tileX, int tileY, int tileType,
                           int cameraOffsetX, int cameraOffsetY) = 0;
     
+    virtual int loadTexture(const char* path) = 0;
+    virtual void drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) = 0;
+    
     virtual int getScreenWidth() const = 0;
     virtual int getScreenHeight() const = 0;
 };

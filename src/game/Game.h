@@ -33,5 +33,8 @@ private:
     Physics physics;
     Collision collision;
     PlayerController controller;
+    
+    // Assets
+    int playerSpritesheet;
 };
 
