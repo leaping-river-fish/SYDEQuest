@@ -1,7 +1,7 @@
 #include "DesktopInput.h"
 
 DesktopInput::DesktopInput() : quit(false) {
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         currentState[i] = false;
         previousState[i] = false;
     }
@@ -9,7 +9,7 @@ DesktopInput::DesktopInput() : quit(false) {
 
 void DesktopInput::update() {
     // Save previous state
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         previousState[i] = currentState[i];
     }
     
@@ -34,6 +34,13 @@ void DesktopInput::update() {
         keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN];
     currentState[getButtonIndex(Button::Pause)] = 
         keys[SDL_SCANCODE_ESCAPE];
+    
+    // Read mouse state and keyboard alternative for Fire
+    Uint32 mouseState = SDL_GetMouseState(nullptr, nullptr);
+    currentState[getButtonIndex(Button::Fire)] = 
+        (mouseState & SDL_BUTTON(SDL_BUTTON_LEFT)) != 0 ||
+        keys[SDL_SCANCODE_X] ||
+        keys[SDL_SCANCODE_LCTRL];
 }
 
 bool DesktopInput::isPressed(Button button) const {

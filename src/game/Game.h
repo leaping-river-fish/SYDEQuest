@@ -1,10 +1,12 @@
 #pragma once
 #include "player/Player.h"
 #include "player/PlayerController.h"
+#include "projectile/Projectile.h"
 #include "level/Level.h"
 #include "level/Camera.h"
 #include "physics/Physics.h"
 #include "physics/Collision.h"
+#include <vector>
 
 class IRenderer;
 class IInput;
@@ -34,7 +36,12 @@ private:
     Collision collision;
     PlayerController controller;
     
+    // Entities
+    std::vector<Projectile> projectiles;
+    
     // Assets
     int playerSpritesheet;
+    int projectileLeftSpritesheet;
+    int projectileRightSpritesheet;
 };
 

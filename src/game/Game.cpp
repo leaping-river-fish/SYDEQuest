@@ -3,11 +3,14 @@
 #include "core/IInput.h"
 #include "core/IHaptics.h"
 #include "core/ITimer.h"
+#include <algorithm>
 
 Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
     : renderer(r), input(i), haptics(h), timer(t),
       camera(r->getScreenWidth(), r->getScreenHeight()),
-      playerSpritesheet(-1)
+      playerSpritesheet(-1),
+      projectileLeftSpritesheet(-1),
+      projectileRightSpritesheet(-1)
 {
 }
 
@@ -15,8 +18,10 @@ void Game::init() {
     // Position player at spawn point
     player.position = Vec2(100, 100);
     
-    // Load player spritesheet
+    // Load spritesheets
     playerSpritesheet = renderer->loadTexture("../assets/AlternatingWalk.png");
+    projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
+    projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
 }
 
 void Game::update() {
@@ -44,6 +49,46 @@ void Game::update() {
     // Update animation/state
     player.update(dt);
     
+    // Handle projectile spawning
+    if (player.wantsToFire) {
+        // Spawn projectile from player center, offset slightly forward
+        Vec2 spawnPos = player.position;
+        spawnPos.x += player.facingRight ? Player::WIDTH : 0;
+        spawnPos.y += Player::HEIGHT / 2 - Projectile::HEIGHT / 2;
+        
+        projectiles.push_back(Projectile(spawnPos, player.facingRight));
+    }
+    
+    // Update all projectiles
+    int camX = camera.getOffsetX();
+    int camY = camera.getOffsetY();
+    int screenWidth = renderer->getScreenWidth();
+    int screenHeight = renderer->getScreenHeight();
+    
+    for (auto& projectile : projectiles) {
+        projectile.update(dt);
+        
+        // Check for tile collision
+        if (collision.checkProjectileTileCollision(projectile, level)) {
+            projectile.shouldDestroy = true;
+        }
+        
+        // Check if projectile is outside camera view
+        float projX = projectile.position.x;
+        float projY = projectile.position.y;
+        if (projX < camX || projX > camX + screenWidth ||
+            projY < camY || projY > camY + screenHeight) {
+            projectile.shouldDestroy = true;
+        }
+    }
+    
+    // Remove destroyed projectiles
+    projectiles.erase(
+        std::remove_if(projectiles.begin(), projectiles.end(),
+            [](const Projectile& p) { return p.shouldDestroy; }),
+        projectiles.end()
+    );
+    
     // Camera follow
     camera.follow(player, level);
 }
@@ -61,6 +106,28 @@ void Game::render() {
             if (tileType != 0) {
                 renderer->drawTile(x, y, tileType, camX, camY);
             }
+        }
+    }
+    
+    // Draw projectiles
+    for (const auto& projectile : projectiles) {
+        Rect dstRect = projectile.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        // Choose sprite sheet based on direction
+        int spritesheet = projectile.movingRight ? projectileRightSpritesheet : projectileLeftSpritesheet;
+        
+        if (spritesheet >= 0) {
+            // Calculate source rect (12 frames in 4x3 grid, 8x8 each)
+            int frameX = (projectile.currentFrame % 4) * 8;
+            int frameY = (projectile.currentFrame / 4) * 8;
+            Rect srcRect(frameX, frameY, 8, 8);
+            
+            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        } else {
+            // Fallback to rectangle if textures fail to load
+            renderer->drawRect(dstRect, Color(255, 200, 0), true);
         }
     }
     

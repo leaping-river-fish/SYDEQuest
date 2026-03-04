@@ -5,6 +5,7 @@ Player::Player()
       velocity(0, 0),
       isGrounded(false),
       wantsToDropThrough(false),
+      wantsToFire(false),
       health(3),
       currentFrame(1),
       animationTimer(0.0f),

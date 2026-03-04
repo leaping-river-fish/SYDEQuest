@@ -5,7 +5,8 @@ enum class Button {
     Right,
     Jump, 
     Down, 
-    Pause
+    Pause,
+    Fire
 };
 
 class IInput {

@@ -14,8 +14,8 @@ public:
     bool shouldQuit() const { return quit; }
     
 private:
-    bool currentState[5];
-    bool previousState[5];
+    bool currentState[6];
+    bool previousState[6];
     bool quit;
     
     int getButtonIndex(Button button) const;

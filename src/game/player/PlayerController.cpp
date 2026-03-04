@@ -6,7 +6,8 @@ PlayerController::PlayerController()
     : jumpBufferTimer(0.0f),
       coyoteTimer(0.0f),
       wasGroundedLastFrame(false),
-      dropThroughTimer(0.0f)
+      dropThroughTimer(0.0f),
+      fireCooldownTimer(0.0f)
 {
 }
 
@@ -14,6 +15,7 @@ void PlayerController::update(Player& player, IInput* input, float deltaTime) {
     handleMovement(player, input);
     handleJump(player, input, deltaTime);
     handleDropThrough(player, input, deltaTime);
+    handleFiring(player, input, deltaTime);
 }
 
 void PlayerController::handleMovement(Player& player, IInput* input) {
@@ -89,6 +91,27 @@ void PlayerController::handleDropThrough(Player& player, IInput* input, float de
         if (dropThroughTimer <= 0.0f) {
             player.wantsToDropThrough = false;
             dropThroughTimer = 0.0f;
+        }
+    }
+}
+
+void PlayerController::handleFiring(Player& player, IInput* input, float deltaTime) {
+    // Always reset the fire flag at the start
+    player.wantsToFire = false;
+    
+    // Update cooldown timer
+    if (fireCooldownTimer > 0.0f) {
+        fireCooldownTimer -= deltaTime;
+        if (fireCooldownTimer < 0.0f) {
+            fireCooldownTimer = 0.0f;
+        }
+    }
+    
+    // Check if player wants to fire and cooldown allows it
+    if (input->wasJustPressed(Button::Fire)) {
+        if (fireCooldownTimer <= 0.0f) {
+            player.wantsToFire = true;
+            fireCooldownTimer = FIRE_COOLDOWN;
         }
     }
 }

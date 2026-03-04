@@ -1,5 +1,6 @@
 #include "Collision.h"
 #include "game/player/Player.h"
+#include "game/projectile/Projectile.h"
 #include "game/level/Level.h"
 #include <cmath>
 
@@ -32,9 +33,10 @@ void Collision::resolveVertical(Player& player, const Level& level) {
                 // Platforms are half-height (8 pixels), positioned at top of tile
                 float platformTop = bottomTile * tileSize + (tileSize - level.PLATFORM_HEIGHT);
                 float playerBottom = collider.y + collider.height;
-                float prevPlayerBottom = playerBottom - player.velocity.y * 0.016f;  // Approx prev frame
                 
-                if (prevPlayerBottom <= platformTop && playerBottom >= platformTop) {
+                // Check if player is coming from above or already on platform
+                // Allow small tolerance for floating point errors and gravity micro-adjustments
+                if (playerBottom >= platformTop - 1.0f && playerBottom <= platformTop + 4.0f && player.velocity.y >= 0) {
                     player.position.y = platformTop - collider.height;
                     player.velocity.y = 0;
                     player.isGrounded = true;
@@ -82,4 +84,26 @@ void Collision::resolveHorizontal(Player& player, const Level& level) {
             }
         }
     }
+}
+
+bool Collision::checkProjectileTileCollision(const Projectile& projectile, const Level& level) {
+    Rect collider = projectile.getCollider();
+    int tileSize = level.getTileSize();
+    
+    int leftTile = (int)(collider.x) / tileSize;
+    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
+    int topTile = (int)(collider.y) / tileSize;
+    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    
+    // Check if projectile hits any solid tile
+    // Projectiles pass through one-way platforms (they fly horizontally)
+    for (int y = topTile; y <= bottomTile; y++) {
+        for (int x = leftTile; x <= rightTile; x++) {
+            if (level.isSolid(x, y)) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
 }

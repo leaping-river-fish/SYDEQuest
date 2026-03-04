@@ -18,6 +18,7 @@ set(GAME_SOURCES
     src/game/Game.cpp
     src/game/player/Player.cpp
     src/game/player/PlayerController.cpp
+    src/game/projectile/Projectile.cpp
     src/game/physics/Physics.cpp
     src/game/physics/Collision.cpp
     src/game/level/Level.cpp

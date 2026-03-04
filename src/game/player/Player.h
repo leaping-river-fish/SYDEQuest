@@ -15,6 +15,7 @@ public:
     
     bool isGrounded;
     bool wantsToDropThrough;  // For one-way platforms
+    bool wantsToFire;  // Request to fire projectile
     int health;
     
     // Animation state
