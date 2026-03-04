@@ -99,9 +99,25 @@ void Game::render() {
     int camX = camera.getOffsetX();
     int camY = camera.getOffsetY();
     
-    // Draw level tiles
-    for (int y = 0; y < level.getHeightInTiles(); y++) {
-        for (int x = 0; x < level.getWidthInTiles(); x++) {
+    // Calculate visible tile range
+    int screenWidth = renderer->getScreenWidth();
+    int screenHeight = renderer->getScreenHeight();
+    int tileSize = level.getTileSize();
+    
+    int startTileX = camX / tileSize;
+    int startTileY = camY / tileSize;
+    int endTileX = (camX + screenWidth) / tileSize + 1;
+    int endTileY = (camY + screenHeight) / tileSize + 1;
+    
+    // Clamp to level boundaries
+    startTileX = std::max(0, startTileX);
+    startTileY = std::max(0, startTileY);
+    endTileX = std::min(level.getWidthInTiles(), endTileX);
+    endTileY = std::min(level.getHeightInTiles(), endTileY);
+    
+    // Draw only visible level tiles
+    for (int y = startTileY; y < endTileY; y++) {
+        for (int x = startTileX; x < endTileX; x++) {
             int tileType = static_cast<int>(level.getTile(x, y));
             if (tileType != 0) {
                 renderer->drawTile(x, y, tileType, camX, camY);
