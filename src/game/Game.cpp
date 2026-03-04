@@ -4,6 +4,7 @@
 #include "core/IHaptics.h"
 #include "core/ITimer.h"
 #include <algorithm>
+#include <cstring>
 
 Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
     : renderer(r), input(i), haptics(h), timer(t),
@@ -12,16 +13,34 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       projectileLeftSpritesheet(-1),
       projectileRightSpritesheet(-1)
 {
+    currentLevelName[0] = '\0';
 }
 
 void Game::init() {
-    // Position player at spawn point
-    player.position = Vec2(100, 100);
+    loadLevel("../levels/level1.txt");
     
-    // Load spritesheets
     playerSpritesheet = renderer->loadTexture("../assets/AlternatingWalk.png");
     projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
     projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
+}
+
+bool Game::loadLevel(const char* levelName) {
+    if (!level.loadFromFile(levelName)) {
+        return false;
+    }
+    
+    strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
+    currentLevelName[sizeof(currentLevelName) - 1] = '\0';
+    
+    player.position = level.getSpawnPoint();
+    player.velocity = Vec2(0, 0);
+    player.isGrounded = false;
+    
+    projectiles.clear();
+    
+    camera.follow(player, level);
+    
+    return true;
 }
 
 void Game::update() {
@@ -91,6 +110,21 @@ void Game::update() {
     
     // Camera follow
     camera.follow(player, level);
+    
+    // Check portal collisions
+    checkPortalCollisions();
+}
+
+void Game::checkPortalCollisions() {
+    Rect playerRect = player.getCollider();
+    const std::vector<Portal>& portals = level.getPortals();
+    
+    for (const Portal& portal : portals) {
+        if (playerRect.intersects(portal.bounds)) {
+            loadLevel(portal.targetLevel);
+            break;
+        }
+    }
 }
 
 void Game::render() {

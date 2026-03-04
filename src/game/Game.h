@@ -21,6 +21,8 @@ public:
     void update();
     void render();
     
+    bool loadLevel(const char* levelName);
+    
 private:
     // Platform interfaces
     IRenderer* renderer;
@@ -43,5 +45,10 @@ private:
     int playerSpritesheet;
     int projectileLeftSpritesheet;
     int projectileRightSpritesheet;
+    
+    // Current level tracking
+    char currentLevelName[64];
+    
+    void checkPortalCollisions();
 };
 
