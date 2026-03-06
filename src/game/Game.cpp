@@ -11,17 +11,19 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       camera(r->getScreenWidth(), r->getScreenHeight()),
       playerSpritesheet(-1),
       projectileLeftSpritesheet(-1),
-      projectileRightSpritesheet(-1)
+      projectileRightSpritesheet(-1),
+      terrainSpritesheet(-1)
 {
     currentLevelName[0] = '\0';
 }
 
 void Game::init() {
-    loadLevel("../levels/level1.txt");
+    loadLevel("../levels/Level1.csv");
     
     playerSpritesheet = renderer->loadTexture("../assets/AlternatingWalk.png");
     projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
     projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
+    terrainSpritesheet = renderer->loadTexture("../assets/FullTerrainSpriteSheet.png");
 }
 
 bool Game::loadLevel(const char* levelName) {
@@ -152,9 +154,9 @@ void Game::render() {
     // Draw only visible level tiles
     for (int y = startTileY; y < endTileY; y++) {
         for (int x = startTileX; x < endTileX; x++) {
-            int tileType = static_cast<int>(level.getTile(x, y));
-            if (tileType != 0) {
-                renderer->drawTile(x, y, tileType, camX, camY);
+            int8_t tileId = level.getTileId(x, y);
+            if (tileId != -1) {
+                renderer->drawTile(x, y, tileId, terrainSpritesheet, camX, camY);
             }
         }
     }

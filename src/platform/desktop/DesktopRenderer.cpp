@@ -35,31 +35,35 @@ void DesktopRenderer::drawRect(const Rect& rect, Color color, bool filled) {
     }
 }
 
-void DesktopRenderer::drawTile(int tileX, int tileY, int tileType,
+void DesktopRenderer::drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                                 int cameraOffsetX, int cameraOffsetY) {
-    if (tileType == 0) return;  // Don't draw air
+    if (tileId == -1) return;  // Don't draw air
+    if (terrainSpritesheet < 0) return;  // Invalid texture
     
     const int TILE_SIZE = 16;
-    const int PLATFORM_HEIGHT = 8;  // Platforms are half-height
+    const int TILES_PER_ROW = 4;  // Spritesheet is 4x4 grid
     
-    // Platforms are drawn thinner and positioned at the bottom of the tile
-    if (tileType == 2) {  // Platform type
-        Rect rect(
-            tileX * TILE_SIZE - cameraOffsetX,
-            tileY * TILE_SIZE + (TILE_SIZE - PLATFORM_HEIGHT) - cameraOffsetY,
-            TILE_SIZE,
-            PLATFORM_HEIGHT
-        );
-        drawRect(rect, getTileColor(tileType), true);
-    } else {  // Solid tiles
-        Rect rect(
-            tileX * TILE_SIZE - cameraOffsetX,
-            tileY * TILE_SIZE - cameraOffsetY,
-            TILE_SIZE,
-            TILE_SIZE
-        );
-        drawRect(rect, getTileColor(tileType), true);
-    }
+    // Calculate source rectangle from spritesheet (2D grid layout)
+    int srcX = (tileId % TILES_PER_ROW) * TILE_SIZE;
+    int srcY = (tileId / TILES_PER_ROW) * TILE_SIZE;
+    
+    Rect srcRect(
+        srcX,
+        srcY,
+        TILE_SIZE,
+        TILE_SIZE
+    );
+    
+    // Calculate destination rectangle (where to draw on screen)
+    Rect dstRect(
+        tileX * TILE_SIZE - cameraOffsetX,
+        tileY * TILE_SIZE - cameraOffsetY,
+        TILE_SIZE,
+        TILE_SIZE
+    );
+    
+    // Draw the tile sprite
+    drawSprite(terrainSpritesheet, srcRect, dstRect, false);
 }
 
 int DesktopRenderer::loadTexture(const char* path) {
@@ -101,12 +105,3 @@ void DesktopRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect&
     SDL_RendererFlip flip = flipHorizontal ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
     SDL_RenderCopyEx(renderer, textures[textureID], &src, &dst, 0.0, nullptr, flip);
 }
-
-Color DesktopRenderer::getTileColor(int tileType) {
-    switch (tileType) {
-        case 1: return Color(139, 69, 19);   // Brown (solid)
-        case 2: return Color(160, 82, 45);   // Lighter brown (platform)
-        default: return Color(255, 0, 255);  // Magenta (error)
-    }
-}
-

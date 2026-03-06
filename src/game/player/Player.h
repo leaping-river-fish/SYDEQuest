@@ -6,7 +6,7 @@ public:
     static constexpr float WIDTH = 16.0f;
     static constexpr float HEIGHT = 16.0f;
     static constexpr float MOVE_SPEED = 150.0f;
-    static constexpr float JUMP_VELOCITY = -437.0f;  // Jump height: exactly 5 tiles (80 pixels)
+    static constexpr float JUMP_VELOCITY = -450.0f;  // Jump height: 5+ tiles (~84 pixels)
     static constexpr float FRAME_TIME = 0.0556f;  // 18 FPS animation
     static constexpr int TOTAL_FRAMES = 12;
     

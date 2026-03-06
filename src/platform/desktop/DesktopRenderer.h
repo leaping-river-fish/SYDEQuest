@@ -11,7 +11,7 @@ public:
     void endFrame() override;
     void clear(Color color) override;
     void drawRect(const Rect& rect, Color color, bool filled) override;
-    void drawTile(int tileX, int tileY, int tileType,
+    void drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                   int cameraOffsetX, int cameraOffsetY) override;
     
     int loadTexture(const char* path) override;
@@ -25,7 +25,5 @@ private:
     int screenWidth;
     int screenHeight;
     std::vector<SDL_Texture*> textures;
-    
-    Color getTileColor(int tileType);
 };
 

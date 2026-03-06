@@ -45,6 +45,7 @@ private:
     int playerSpritesheet;
     int projectileLeftSpritesheet;
     int projectileRightSpritesheet;
+    int terrainSpritesheet;
     
     // Current level tracking
     char currentLevelName[64];

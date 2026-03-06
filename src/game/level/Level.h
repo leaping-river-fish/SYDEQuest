@@ -3,11 +3,10 @@
 #include <vector>
 #include "../../core/types.h"
 
-enum class TileType : uint8_t {
-    Air = 0,
-    Solid = 1,
-    Platform = 2,
-};
+// Tile IDs from Tiled map editor:
+// -1: Air (empty space)
+// 0-11: Solid blocks (various corners, edges, fills)
+// 12-14: Platform pieces (left, middle, right)
 
 struct Portal {
     Rect bounds;
@@ -30,7 +29,7 @@ public:
     bool loadFromFile(const char* filename);
     void unload();
     
-    TileType getTile(int tileX, int tileY) const;
+    int8_t getTileId(int tileX, int tileY) const;
     bool isSolid(int tileX, int tileY) const;
     bool isPlatform(int tileX, int tileY) const;
 
@@ -46,7 +45,7 @@ public:
 private:
     int width;
     int height;
-    TileType* tiles;
+    int8_t* tileIds;  // Stores tile IDs from Tiled (-1 to 14)
     Vec2 spawnPoint;
     std::vector<Portal> portals;
 

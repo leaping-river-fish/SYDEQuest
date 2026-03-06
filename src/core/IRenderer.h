@@ -10,7 +10,7 @@ public:
     virtual void clear(Color color) = 0;
     
     virtual void drawRect(const Rect& rect, Color color, bool filled) = 0;
-    virtual void drawTile(int tileX, int tileY, int tileType,
+    virtual void drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                           int cameraOffsetX, int cameraOffsetY) = 0;
     
     virtual int loadTexture(const char* path) = 0;

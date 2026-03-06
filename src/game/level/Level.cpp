@@ -1,8 +1,9 @@
 #include "Level.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
-Level::Level() : width(0), height(0), tiles(nullptr), spawnPoint(100, 100) {
+Level::Level() : width(0), height(0), tileIds(nullptr), spawnPoint(100, 100) {
     loadTestLevel();
 }
 
@@ -11,29 +12,30 @@ Level::~Level() {
 }
 
 void Level::unload() {
-    if (tiles != nullptr) {
-        delete[] tiles;
-        tiles = nullptr;
+    if (tileIds != nullptr) {
+        delete[] tileIds;
+        tileIds = nullptr;
     }
     width = 0;
     height = 0;
     portals.clear();
 }
 
-TileType Level::getTile(int tileX, int tileY) const {
-    if (tiles == nullptr || tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) {
-        return TileType::Solid;
+int8_t Level::getTileId(int tileX, int tileY) const {
+    if (tileIds == nullptr || tileX < 0 || tileX >= width || tileY < 0 || tileY >= height) {
+        return 0;  // Return solid tile for out of bounds
     }
-    return tiles[tileY * width + tileX];
+    return tileIds[tileY * width + tileX];
 }
 
 bool Level::isSolid(int tileX, int tileY) const {
-    TileType tile = getTile(tileX, tileY);
-    return tile == TileType::Solid;
+    int8_t tileId = getTileId(tileX, tileY);
+    return tileId >= 0 && tileId <= 11;  // Tile IDs 0-11 are solid blocks
 }
 
 bool Level::isPlatform(int tileX, int tileY) const {
-    return getTile(tileX, tileY) == TileType::Platform;
+    int8_t tileId = getTileId(tileX, tileY);
+    return tileId >= 12 && tileId <= 14;  // Tile IDs 12-14 are platforms
 }
 
 bool Level::loadFromFile(const char* filename) {
@@ -42,10 +44,34 @@ bool Level::loadFromFile(const char* filename) {
         return false;
     }
     
-    int newWidth, newHeight;
-    if (fscanf(file, "%d %d\n", &newWidth, &newHeight) != 2) {
-        fclose(file);
-        return false;
+    // First pass: determine dimensions by reading the file
+    char line[4096];
+    int newWidth = 0;
+    int newHeight = 0;
+    
+    // Read first line to get width
+    if (fgets(line, sizeof(line), file)) {
+        // Count commas + 1 to get width
+        newWidth = 1;
+        for (int i = 0; line[i] != '\0' && line[i] != '\n'; i++) {
+            if (line[i] == ',') {
+                newWidth++;
+            }
+        }
+        newHeight = 1;
+        
+        // Count remaining lines (stop at metadata lines)
+        while (fgets(line, sizeof(line), file)) {
+            // Skip empty lines
+            if (line[0] == '\n' || line[0] == '\0') {
+                continue;
+            }
+            // Stop counting if we hit a metadata line (starts with a letter)
+            if ((line[0] >= 'A' && line[0] <= 'Z') || (line[0] >= 'a' && line[0] <= 'z')) {
+                break;
+            }
+            newHeight++;
+        }
     }
     
     if (newWidth <= 0 || newHeight <= 0 || newWidth > 1024 || newHeight > 1024) {
@@ -53,33 +79,42 @@ bool Level::loadFromFile(const char* filename) {
         return false;
     }
     
+    // Reset file to beginning
+    fseek(file, 0, SEEK_SET);
+    
     unload();
     
     width = newWidth;
     height = newHeight;
-    tiles = new TileType[width * height];
+    tileIds = new int8_t[width * height];
     
+    // Initialize all tiles to air
     for (int i = 0; i < width * height; i++) {
-        tiles[i] = TileType::Air;
+        tileIds[i] = -1;
     }
     
+    // Second pass: parse the CSV data
     for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            int tileValue;
-            if (fscanf(file, "%1d", &tileValue) != 1) {
-                fclose(file);
-                unload();
-                return false;
-            }
-            
-            if (tileValue >= 0 && tileValue <= 2) {
-                tiles[y * width + x] = static_cast<TileType>(tileValue);
-            }
+        if (!fgets(line, sizeof(line), file)) {
+            fclose(file);
+            unload();
+            return false;
         }
-        fscanf(file, "\n");
+        
+        // Parse comma-separated values
+        int x = 0;
+        char* token = strtok(line, ",");
+        while (token != nullptr && x < width) {
+            int tileValue = atoi(token);
+            if (tileValue >= -1 && tileValue <= 14) {
+                tileIds[y * width + x] = static_cast<int8_t>(tileValue);
+            }
+            x++;
+            token = strtok(nullptr, ",");
+        }
     }
     
-    char line[256];
+    // Parse metadata (SPAWN, PORTAL, etc.)
     while (fgets(line, sizeof(line), file)) {
         if (strncmp(line, "SPAWN ", 6) == 0) {
             float sx, sy;
@@ -110,39 +145,44 @@ void Level::loadTestLevel() {
     
     width = 64;
     height = 32;
-    tiles = new TileType[width * height];
+    tileIds = new int8_t[width * height];
     
+    // Initialize all tiles to air (-1)
     for (int i = 0; i < width * height; i++) {
-        tiles[i] = TileType::Air;
+        tileIds[i] = -1;
     }
     
+    // Bottom two rows - solid blocks (using tile ID 4 for middle fill)
     for (int x = 0; x < width; x++) {
-        tiles[(height - 1) * width + x] = TileType::Solid;
-        tiles[(height - 2) * width + x] = TileType::Solid;
+        tileIds[(height - 1) * width + x] = 4;
+        tileIds[(height - 2) * width + x] = 4;
     }
     
+    // Left wall - solid blocks
     for (int y = 0; y < height; y++) {
-        tiles[y * width + 0] = TileType::Solid;
+        tileIds[y * width + 0] = 4;
     }
     
+    // Right wall - solid blocks
     for (int y = 0; y < height; y++) {
-        tiles[y * width + (width - 1)] = TileType::Solid;
+        tileIds[y * width + (width - 1)] = 4;
     }
     
+    // Platforms (using tile ID 13 for middle platform piece)
     for (int x = 10; x < 20; x++) {
-        tiles[(height - 6) * width + x] = TileType::Platform;
+        tileIds[(height - 6) * width + x] = 13;
     }
     
     for (int x = 25; x < 35; x++) {
-        tiles[(height - 10) * width + x] = TileType::Platform;
+        tileIds[(height - 10) * width + x] = 13;
     }
 
     for (int x = 50; x < 60; x++) {
-        tiles[(height - 6) * width + x] = TileType::Platform;
+        tileIds[(height - 6) * width + x] = 13;
     }
     
     for (int i = 0; i < 5; i++) {
-        tiles[(height - 3 - i) * width + (40 + i)] = TileType::Platform;
+        tileIds[(height - 3 - i) * width + (40 + i)] = 13;
     }
     
     spawnPoint = Vec2(100, 100);
