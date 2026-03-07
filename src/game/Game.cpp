@@ -12,7 +12,8 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       playerSpritesheet(-1),
       projectileLeftSpritesheet(-1),
       projectileRightSpritesheet(-1),
-      terrainSpritesheet(-1)
+      terrainSpritesheet(-1),
+      enemySpritesheet(-1)
 {
     currentLevelName[0] = '\0';
 }
@@ -24,6 +25,7 @@ void Game::init() {
     projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
     projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
     terrainSpritesheet = renderer->loadTexture("../assets/FullTerrainSpriteSheet.png");
+    enemySpritesheet = renderer->loadTexture("../assets/Circle.png");
 }
 
 bool Game::loadLevel(const char* levelName) {
@@ -193,10 +195,21 @@ void Game::render() {
     
     // Draw enemies
     for (const auto& enemy : enemies) {
-        Rect enemyRect = enemy.getCollider();
-        enemyRect.x -= camX;
-        enemyRect.y -= camY;
-        renderer->drawRect(enemyRect, Color(255, 0, 0), true);
+        Rect dstRect = enemy.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        if (enemySpritesheet >= 0) {
+            // Calculate source rect (12 frames in 4x3 grid, 16x16 each)
+            int frameX = (enemy.currentFrame % 4) * 16;
+            int frameY = (enemy.currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            
+            renderer->drawSprite(enemySpritesheet, srcRect, dstRect, false);
+        } else {
+            // Fallback to red rectangle if texture fails to load
+            renderer->drawRect(dstRect, Color(255, 0, 0), true);
+        }
     }
     
     // Draw projectiles

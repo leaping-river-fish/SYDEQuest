@@ -7,6 +7,8 @@ Enemy::Enemy(Vec2 startPos, bool startMovingRight)
     , velocity(startMovingRight ? MOVE_SPEED : -MOVE_SPEED, 0.0f)
     , health(3)
     , movingRight(startMovingRight)
+    , currentFrame(0)
+    , animationTimer(0.0f)
 {
 }
 
@@ -20,6 +22,13 @@ void Enemy::update(float deltaTime, const Level& level) {
     checkWallCollision(level);
     
     position.y += velocity.y * deltaTime;
+    
+    // Update animation
+    animationTimer += deltaTime;
+    if (animationTimer >= FRAME_TIME) {
+        animationTimer -= FRAME_TIME;
+        currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
+    }
     
     Rect collider = getCollider();
     int tileSize = level.getTileSize();

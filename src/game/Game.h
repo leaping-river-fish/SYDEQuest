@@ -48,6 +48,7 @@ private:
     int projectileLeftSpritesheet;
     int projectileRightSpritesheet;
     int terrainSpritesheet;
+    int enemySpritesheet;
     
     // Current level tracking
     char currentLevelName[64];
