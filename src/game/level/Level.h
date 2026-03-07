@@ -42,6 +42,8 @@ public:
     Vec2 getSpawnPoint() const { return spawnPoint; }
     const std::vector<Portal>& getPortals() const { return portals; }
     const std::vector<Vec2>& getEnemySpawns() const { return enemySpawns; }
+    const std::vector<Vec2>& getBasicEnemySpawns() const { return basicEnemySpawns; }
+    const std::vector<Vec2>& getRangedEnemySpawns() const { return rangedEnemySpawns; }
 
 private:
     int width;
@@ -49,7 +51,9 @@ private:
     int8_t* tileIds;  // Stores tile IDs from Tiled (-1 to 14)
     Vec2 spawnPoint;
     std::vector<Portal> portals;
-    std::vector<Vec2> enemySpawns;
+    std::vector<Vec2> enemySpawns;  // Legacy: maps to basicEnemySpawns
+    std::vector<Vec2> basicEnemySpawns;
+    std::vector<Vec2> rangedEnemySpawns;
 
     void loadTestLevel();
 };

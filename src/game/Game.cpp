@@ -13,7 +13,10 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       projectileLeftSpritesheet(-1),
       projectileRightSpritesheet(-1),
       terrainSpritesheet(-1),
-      enemySpritesheet(-1)
+      basicEnemySpritesheet(-1),
+      rangedEnemySpritesheet(-1),
+      enemyProjectileLeftSpritesheet(-1),
+      enemyProjectileRightSpritesheet(-1)
 {
     currentLevelName[0] = '\0';
 }
@@ -25,7 +28,10 @@ void Game::init() {
     projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
     projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
     terrainSpritesheet = renderer->loadTexture("../assets/FullTerrainSpriteSheet.png");
-    enemySpritesheet = renderer->loadTexture("../assets/Circle.png");
+    basicEnemySpritesheet = renderer->loadTexture("../assets/Circle.png");
+    rangedEnemySpritesheet = renderer->loadTexture("../assets/CalcQuiz.png");
+    enemyProjectileLeftSpritesheet = renderer->loadTexture("../assets/IntegralSpinLeft.png");
+    enemyProjectileRightSpritesheet = renderer->loadTexture("../assets/IntegralSpinRight.png");
 }
 
 bool Game::loadLevel(const char* levelName) {
@@ -41,12 +47,20 @@ bool Game::loadLevel(const char* levelName) {
     player.isGrounded = false;
     
     projectiles.clear();
-    enemies.clear();
+    basicEnemies.clear();
+    rangedEnemies.clear();
+    enemyProjectiles.clear();
     
-    // Spawn enemies from level data
-    const std::vector<Vec2>& enemySpawnPoints = level.getEnemySpawns();
-    for (const Vec2& spawnPos : enemySpawnPoints) {
-        enemies.push_back(Enemy(spawnPos, true));
+    // Spawn basic enemies from level data
+    const std::vector<Vec2>& basicEnemySpawnPoints = level.getBasicEnemySpawns();
+    for (const Vec2& spawnPos : basicEnemySpawnPoints) {
+        basicEnemies.push_back(BasicEnemy(spawnPos, true));
+    }
+    
+    // Spawn ranged enemies from level data
+    const std::vector<Vec2>& rangedEnemySpawnPoints = level.getRangedEnemySpawns();
+    for (const Vec2& spawnPos : rangedEnemySpawnPoints) {
+        rangedEnemies.push_back(RangedEnemy(spawnPos, true));
     }
     
     camera.follow(player, level);
@@ -112,19 +126,61 @@ void Game::update() {
         }
     }
     
-    // Update all enemies
-    for (auto& enemy : enemies) {
+    // Update all basic enemies
+    for (auto& enemy : basicEnemies) {
         enemy.update(dt, level);
     }
     
-    // Check projectile-enemy collisions
+    // Update all ranged enemies (pass player position and projectiles vector)
+    for (auto& enemy : rangedEnemies) {
+        enemy.update(dt, level, player, enemyProjectiles);
+    }
+    
+    // Update all enemy projectiles
+    for (auto& projectile : enemyProjectiles) {
+        projectile.update(dt);
+        
+        // Check for tile collision (solid blocks only, not platforms)
+        if (collision.checkEnemyProjectileTileCollision(projectile, level)) {
+            projectile.shouldDestroy = true;
+        }
+        
+        // Check if projectile is outside camera view
+        float projX = projectile.position.x;
+        float projY = projectile.position.y;
+        if (projX < camX || projX > camX + screenWidth ||
+            projY < camY || projY > camY + screenHeight) {
+            projectile.shouldDestroy = true;
+        }
+    }
+    
+    // Check player projectile vs basic enemy collisions
     for (auto& projectile : projectiles) {
-        for (auto& enemy : enemies) {
+        for (auto& enemy : basicEnemies) {
             if (projectile.getCollider().intersects(enemy.getCollider())) {
                 projectile.shouldDestroy = true;
                 enemy.takeDamage(1);
                 break;
             }
+        }
+    }
+    
+    // Check player projectile vs ranged enemy collisions
+    for (auto& projectile : projectiles) {
+        for (auto& enemy : rangedEnemies) {
+            if (projectile.getCollider().intersects(enemy.getCollider())) {
+                projectile.shouldDestroy = true;
+                enemy.takeDamage(1);
+                break;
+            }
+        }
+    }
+    
+    // Check enemy projectile vs player collisions
+    for (auto& projectile : enemyProjectiles) {
+        if (projectile.getCollider().intersects(player.getCollider())) {
+            projectile.shouldDestroy = true;
+            player.health -= 1;
         }
     }
     
@@ -135,11 +191,25 @@ void Game::update() {
         projectiles.end()
     );
     
-    // Remove dead enemies
-    enemies.erase(
-        std::remove_if(enemies.begin(), enemies.end(),
-            [](const Enemy& e) { return e.health <= 0; }),
-        enemies.end()
+    // Remove destroyed enemy projectiles
+    enemyProjectiles.erase(
+        std::remove_if(enemyProjectiles.begin(), enemyProjectiles.end(),
+            [](const EnemyProjectile& p) { return p.shouldDestroy; }),
+        enemyProjectiles.end()
+    );
+    
+    // Remove dead basic enemies
+    basicEnemies.erase(
+        std::remove_if(basicEnemies.begin(), basicEnemies.end(),
+            [](const BasicEnemy& e) { return e.health <= 0; }),
+        basicEnemies.end()
+    );
+    
+    // Remove dead ranged enemies
+    rangedEnemies.erase(
+        std::remove_if(rangedEnemies.begin(), rangedEnemies.end(),
+            [](const RangedEnemy& e) { return e.health <= 0; }),
+        rangedEnemies.end()
     );
     
     // Camera follow
@@ -193,22 +263,64 @@ void Game::render() {
         }
     }
     
-    // Draw enemies
-    for (const auto& enemy : enemies) {
+    // Draw basic enemies
+    for (const auto& enemy : basicEnemies) {
         Rect dstRect = enemy.getCollider();
         dstRect.x -= camX;
         dstRect.y -= camY;
         
-        if (enemySpritesheet >= 0) {
+        if (basicEnemySpritesheet >= 0) {
             // Calculate source rect (12 frames in 4x3 grid, 16x16 each)
             int frameX = (enemy.currentFrame % 4) * 16;
             int frameY = (enemy.currentFrame / 4) * 16;
             Rect srcRect(frameX, frameY, 16, 16);
             
-            renderer->drawSprite(enemySpritesheet, srcRect, dstRect, false);
+            renderer->drawSprite(basicEnemySpritesheet, srcRect, dstRect, false);
         } else {
             // Fallback to red rectangle if texture fails to load
             renderer->drawRect(dstRect, Color(255, 0, 0), true);
+        }
+    }
+    
+    // Draw ranged enemies
+    for (const auto& enemy : rangedEnemies) {
+        Rect dstRect = enemy.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        if (rangedEnemySpritesheet >= 0) {
+            // Calculate source rect (12 frames in 4x3 grid, 16x16 each)
+            int frameX = (enemy.currentFrame % 4) * 16;
+            int frameY = (enemy.currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            
+            // Flip sprite based on facing direction
+            renderer->drawSprite(rangedEnemySpritesheet, srcRect, dstRect, enemy.facingRight);
+        } else {
+            // Fallback to orange rectangle if texture fails to load
+            renderer->drawRect(dstRect, Color(255, 128, 0), true);
+        }
+    }
+    
+    // Draw enemy projectiles
+    for (const auto& projectile : enemyProjectiles) {
+        Rect dstRect = projectile.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        // Choose sprite sheet based on direction
+        int spritesheet = projectile.movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
+        
+        if (spritesheet >= 0) {
+            // Calculate source rect (12 frames in 4x3 grid, 16x16 each)
+            int frameX = (projectile.currentFrame % 4) * 16;
+            int frameY = (projectile.currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            
+            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        } else {
+            // Fallback to purple rectangle if textures fail to load
+            renderer->drawRect(dstRect, Color(128, 0, 255), true);
         }
     }
     

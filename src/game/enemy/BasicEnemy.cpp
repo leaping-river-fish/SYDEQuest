@@ -1,8 +1,8 @@
-#include "Enemy.h"
+#include "BasicEnemy.h"
 #include "../level/Level.h"
 #include <cmath>
 
-Enemy::Enemy(Vec2 startPos, bool startMovingRight)
+BasicEnemy::BasicEnemy(Vec2 startPos, bool startMovingRight)
     : position(startPos)
     , velocity(startMovingRight ? MOVE_SPEED : -MOVE_SPEED, 0.0f)
     , health(3)
@@ -12,7 +12,7 @@ Enemy::Enemy(Vec2 startPos, bool startMovingRight)
 {
 }
 
-void Enemy::update(float deltaTime, const Level& level) {
+void BasicEnemy::update(float deltaTime, const Level& level) {
     applyGravity(deltaTime);
     
     checkEdgeDetection(level);
@@ -59,16 +59,16 @@ void Enemy::update(float deltaTime, const Level& level) {
     }
 }
 
-bool Enemy::takeDamage(int amount) {
+bool BasicEnemy::takeDamage(int amount) {
     health -= amount;
     return health <= 0;
 }
 
-Rect Enemy::getCollider() const {
+Rect BasicEnemy::getCollider() const {
     return Rect(position.x, position.y, WIDTH, HEIGHT);
 }
 
-void Enemy::checkEdgeDetection(const Level& level) {
+void BasicEnemy::checkEdgeDetection(const Level& level) {
     int tileSize = level.getTileSize();
     
     float checkX;
@@ -91,7 +91,7 @@ void Enemy::checkEdgeDetection(const Level& level) {
     }
 }
 
-void Enemy::checkWallCollision(const Level& level) {
+void BasicEnemy::checkWallCollision(const Level& level) {
     Rect collider = getCollider();
     int tileSize = level.getTileSize();
     
@@ -121,7 +121,7 @@ void Enemy::checkWallCollision(const Level& level) {
     }
 }
 
-void Enemy::applyGravity(float deltaTime) {
+void BasicEnemy::applyGravity(float deltaTime) {
     velocity.y += GRAVITY * deltaTime;
     if (velocity.y > MAX_FALL_SPEED) {
         velocity.y = MAX_FALL_SPEED;

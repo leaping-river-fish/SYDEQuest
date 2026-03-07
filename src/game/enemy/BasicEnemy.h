@@ -3,7 +3,7 @@
 
 class Level;
 
-class Enemy {
+class BasicEnemy {
 public:
     static constexpr float WIDTH = 16.0f;
     static constexpr float HEIGHT = 16.0f;
@@ -22,7 +22,7 @@ public:
     int currentFrame;
     float animationTimer;
     
-    Enemy(Vec2 startPos, bool startMovingRight = true);
+    BasicEnemy(Vec2 startPos, bool startMovingRight = true);
     
     void update(float deltaTime, const Level& level);
     bool takeDamage(int amount);

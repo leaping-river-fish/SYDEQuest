@@ -1,6 +1,7 @@
 #include "Collision.h"
 #include "game/player/Player.h"
 #include "game/projectile/Projectile.h"
+#include "game/enemy/EnemyProjectile.h"
 #include "game/level/Level.h"
 #include <cmath>
 
@@ -97,6 +98,28 @@ bool Collision::checkProjectileTileCollision(const Projectile& projectile, const
     
     // Check if projectile hits any solid tile
     // Projectiles pass through one-way platforms (they fly horizontally)
+    for (int y = topTile; y <= bottomTile; y++) {
+        for (int x = leftTile; x <= rightTile; x++) {
+            if (level.isSolid(x, y)) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+bool Collision::checkEnemyProjectileTileCollision(const EnemyProjectile& projectile, const Level& level) {
+    Rect collider = projectile.getCollider();
+    int tileSize = level.getTileSize();
+    
+    int leftTile = (int)(collider.x) / tileSize;
+    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
+    int topTile = (int)(collider.y) / tileSize;
+    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    
+    // Check if enemy projectile hits any solid tile
+    // Enemy projectiles pass through platforms but collide with solid blocks
     for (int y = topTile; y <= bottomTile; y++) {
         for (int x = leftTile; x <= rightTile; x++) {
             if (level.isSolid(x, y)) {

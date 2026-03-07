@@ -20,6 +20,8 @@ void Level::unload() {
     height = 0;
     portals.clear();
     enemySpawns.clear();
+    basicEnemySpawns.clear();
+    rangedEnemySpawns.clear();
 }
 
 int8_t Level::getTileId(int tileX, int tileY) const {
@@ -134,10 +136,22 @@ bool Level::loadFromFile(const char* filename) {
                 portal.targetSpawn = Vec2(tsx, tsy);
                 portals.push_back(portal);
             }
+        } else if (strncmp(line, "ENEMY_BASIC ", 12) == 0) {
+            float ex, ey;
+            if (sscanf(line + 12, "%f %f", &ex, &ey) == 2) {
+                basicEnemySpawns.push_back(Vec2(ex, ey));
+            }
+        } else if (strncmp(line, "ENEMY_RANGED ", 13) == 0) {
+            float ex, ey;
+            if (sscanf(line + 13, "%f %f", &ex, &ey) == 2) {
+                rangedEnemySpawns.push_back(Vec2(ex, ey));
+            }
         } else if (strncmp(line, "ENEMY ", 6) == 0) {
+            // Legacy support: ENEMY defaults to basic enemy
             float ex, ey;
             if (sscanf(line + 6, "%f %f", &ex, &ey) == 2) {
                 enemySpawns.push_back(Vec2(ex, ey));
+                basicEnemySpawns.push_back(Vec2(ex, ey));
             }
         }
     }

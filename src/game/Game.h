@@ -2,7 +2,9 @@
 #include "player/Player.h"
 #include "player/PlayerController.h"
 #include "projectile/Projectile.h"
-#include "enemy/Enemy.h"
+#include "enemy/BasicEnemy.h"
+#include "enemy/RangedEnemy.h"
+#include "enemy/EnemyProjectile.h"
 #include "level/Level.h"
 #include "level/Camera.h"
 #include "physics/Physics.h"
@@ -41,14 +43,19 @@ private:
     
     // Entities
     std::vector<Projectile> projectiles;
-    std::vector<Enemy> enemies;
+    std::vector<BasicEnemy> basicEnemies;
+    std::vector<RangedEnemy> rangedEnemies;
+    std::vector<EnemyProjectile> enemyProjectiles;
     
     // Assets
     int playerSpritesheet;
     int projectileLeftSpritesheet;
     int projectileRightSpritesheet;
     int terrainSpritesheet;
-    int enemySpritesheet;
+    int basicEnemySpritesheet;
+    int rangedEnemySpritesheet;
+    int enemyProjectileLeftSpritesheet;
+    int enemyProjectileRightSpritesheet;
     
     // Current level tracking
     char currentLevelName[64];
