@@ -2,6 +2,7 @@
 #include "player/Player.h"
 #include "player/PlayerController.h"
 #include "projectile/Projectile.h"
+#include "enemy/Enemy.h"
 #include "level/Level.h"
 #include "level/Camera.h"
 #include "physics/Physics.h"
@@ -40,6 +41,7 @@ private:
     
     // Entities
     std::vector<Projectile> projectiles;
+    std::vector<Enemy> enemies;
     
     // Assets
     int playerSpritesheet;

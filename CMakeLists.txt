@@ -19,6 +19,7 @@ set(GAME_SOURCES
     src/game/player/Player.cpp
     src/game/player/PlayerController.cpp
     src/game/projectile/Projectile.cpp
+    src/game/enemy/Enemy.cpp
     src/game/physics/Physics.cpp
     src/game/physics/Collision.cpp
     src/game/level/Level.cpp

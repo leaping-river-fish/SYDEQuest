@@ -39,6 +39,13 @@ bool Game::loadLevel(const char* levelName) {
     player.isGrounded = false;
     
     projectiles.clear();
+    enemies.clear();
+    
+    // Spawn enemies from level data
+    const std::vector<Vec2>& enemySpawnPoints = level.getEnemySpawns();
+    for (const Vec2& spawnPos : enemySpawnPoints) {
+        enemies.push_back(Enemy(spawnPos, true));
+    }
     
     camera.follow(player, level);
     
@@ -103,11 +110,34 @@ void Game::update() {
         }
     }
     
+    // Update all enemies
+    for (auto& enemy : enemies) {
+        enemy.update(dt, level);
+    }
+    
+    // Check projectile-enemy collisions
+    for (auto& projectile : projectiles) {
+        for (auto& enemy : enemies) {
+            if (projectile.getCollider().intersects(enemy.getCollider())) {
+                projectile.shouldDestroy = true;
+                enemy.takeDamage(1);
+                break;
+            }
+        }
+    }
+    
     // Remove destroyed projectiles
     projectiles.erase(
         std::remove_if(projectiles.begin(), projectiles.end(),
             [](const Projectile& p) { return p.shouldDestroy; }),
         projectiles.end()
+    );
+    
+    // Remove dead enemies
+    enemies.erase(
+        std::remove_if(enemies.begin(), enemies.end(),
+            [](const Enemy& e) { return e.health <= 0; }),
+        enemies.end()
     );
     
     // Camera follow
@@ -159,6 +189,14 @@ void Game::render() {
                 renderer->drawTile(x, y, tileId, terrainSpritesheet, camX, camY);
             }
         }
+    }
+    
+    // Draw enemies
+    for (const auto& enemy : enemies) {
+        Rect enemyRect = enemy.getCollider();
+        enemyRect.x -= camX;
+        enemyRect.y -= camY;
+        renderer->drawRect(enemyRect, Color(255, 0, 0), true);
     }
     
     // Draw projectiles

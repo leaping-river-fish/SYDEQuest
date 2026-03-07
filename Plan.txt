@@ -1,0 +1,1 @@
+Add Energy to player, make player take damage from enemies, add sprite to enemy

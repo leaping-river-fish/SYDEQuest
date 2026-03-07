@@ -19,6 +19,7 @@ void Level::unload() {
     width = 0;
     height = 0;
     portals.clear();
+    enemySpawns.clear();
 }
 
 int8_t Level::getTileId(int tileX, int tileY) const {
@@ -114,7 +115,7 @@ bool Level::loadFromFile(const char* filename) {
         }
     }
     
-    // Parse metadata (SPAWN, PORTAL, etc.)
+    // Parse metadata (SPAWN, PORTAL, ENEMY, etc.)
     while (fgets(line, sizeof(line), file)) {
         if (strncmp(line, "SPAWN ", 6) == 0) {
             float sx, sy;
@@ -132,6 +133,11 @@ bool Level::loadFromFile(const char* filename) {
                 portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
                 portal.targetSpawn = Vec2(tsx, tsy);
                 portals.push_back(portal);
+            }
+        } else if (strncmp(line, "ENEMY ", 6) == 0) {
+            float ex, ey;
+            if (sscanf(line + 6, "%f %f", &ex, &ey) == 2) {
+                enemySpawns.push_back(Vec2(ex, ey));
             }
         }
     }
