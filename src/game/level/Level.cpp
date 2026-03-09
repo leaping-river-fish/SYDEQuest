@@ -22,6 +22,7 @@ void Level::unload() {
     enemySpawns.clear();
     basicEnemySpawns.clear();
     rangedEnemySpawns.clear();
+    healthPackSpawns.clear();
 }
 
 int8_t Level::getTileId(int tileX, int tileY) const {
@@ -152,6 +153,11 @@ bool Level::loadFromFile(const char* filename) {
             if (sscanf(line + 6, "%f %f", &ex, &ey) == 2) {
                 enemySpawns.push_back(Vec2(ex, ey));
                 basicEnemySpawns.push_back(Vec2(ex, ey));
+            }
+        } else if (strncmp(line, "HEALTH_PACK ", 12) == 0) {
+            float hx, hy;
+            if (sscanf(line + 12, "%f %f", &hx, &hy) == 2) {
+                healthPackSpawns.push_back(Vec2(hx, hy));
             }
         }
     }

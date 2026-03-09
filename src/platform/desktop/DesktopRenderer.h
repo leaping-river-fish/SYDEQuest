@@ -1,11 +1,13 @@
 #pragma once
 #include "core/IRenderer.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <vector>
 
 class DesktopRenderer : public IRenderer {
 public:
     DesktopRenderer(SDL_Renderer* renderer, int screenWidth, int screenHeight);
+    ~DesktopRenderer();
     
     void beginFrame() override;
     void endFrame() override;
@@ -17,6 +19,8 @@ public:
     int loadTexture(const char* path) override;
     void drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) override;
     
+    void drawText(const std::string& text, int x, int y, Color color) override;
+    
     int getScreenWidth() const override { return screenWidth; }
     int getScreenHeight() const override { return screenHeight; }
     
@@ -25,5 +29,6 @@ private:
     int screenWidth;
     int screenHeight;
     std::vector<SDL_Texture*> textures;
+    TTF_Font* font;
 };
 

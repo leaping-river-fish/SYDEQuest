@@ -5,6 +5,7 @@
 #include "core/ITimer.h"
 #include <algorithm>
 #include <cstring>
+#include <string>
 
 Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
     : renderer(r), input(i), haptics(h), timer(t),
@@ -16,7 +17,11 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       basicEnemySpritesheet(-1),
       rangedEnemySpritesheet(-1),
       enemyProjectileLeftSpritesheet(-1),
-      enemyProjectileRightSpritesheet(-1)
+      enemyProjectileRightSpritesheet(-1),
+      energySpritesheet(-1),
+      healthPackSpritesheet(-1),
+      hpUIFrame(0),
+      hpUIAnimTimer(0.0f)
 {
     currentLevelName[0] = '\0';
 }
@@ -32,6 +37,8 @@ void Game::init() {
     rangedEnemySpritesheet = renderer->loadTexture("../assets/CalcQuiz.png");
     enemyProjectileLeftSpritesheet = renderer->loadTexture("../assets/IntegralSpinLeft.png");
     enemyProjectileRightSpritesheet = renderer->loadTexture("../assets/IntegralSpinRight.png");
+    energySpritesheet = renderer->loadTexture("../assets/Energy.png");
+    healthPackSpritesheet = renderer->loadTexture("../assets/EnergyDrink.png");
 }
 
 bool Game::loadLevel(const char* levelName) {
@@ -50,6 +57,7 @@ bool Game::loadLevel(const char* levelName) {
     basicEnemies.clear();
     rangedEnemies.clear();
     enemyProjectiles.clear();
+    healthPacks.clear();
     
     // Spawn basic enemies from level data
     const std::vector<Vec2>& basicEnemySpawnPoints = level.getBasicEnemySpawns();
@@ -61,6 +69,12 @@ bool Game::loadLevel(const char* levelName) {
     const std::vector<Vec2>& rangedEnemySpawnPoints = level.getRangedEnemySpawns();
     for (const Vec2& spawnPos : rangedEnemySpawnPoints) {
         rangedEnemies.push_back(RangedEnemy(spawnPos, true));
+    }
+    
+    // Spawn health packs from level data
+    const std::vector<Vec2>& healthPackSpawnPoints = level.getHealthPackSpawns();
+    for (const Vec2& spawnPos : healthPackSpawnPoints) {
+        healthPacks.push_back(HealthPack(spawnPos));
     }
     
     camera.follow(player, level);
@@ -136,6 +150,31 @@ void Game::update() {
         enemy.update(dt, level, player, enemyProjectiles);
     }
     
+    // Check enemy collision damage
+    if (player.invincibilityTimer <= 0.0f) {
+        Rect playerRect = player.getCollider();
+        
+        // Check basic enemy collisions
+        for (const auto& enemy : basicEnemies) {
+            if (playerRect.intersects(enemy.getCollider())) {
+                player.health -= 1;
+                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                break;
+            }
+        }
+        
+        // Check ranged enemy collisions (only if still not invincible)
+        if (player.invincibilityTimer <= 0.0f) {
+            for (const auto& enemy : rangedEnemies) {
+                if (playerRect.intersects(enemy.getCollider())) {
+                    player.health -= 1;
+                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    break;
+                }
+            }
+        }
+    }
+    
     // Update all enemy projectiles
     for (auto& projectile : enemyProjectiles) {
         projectile.update(dt);
@@ -152,6 +191,18 @@ void Game::update() {
             projY < camY || projY > camY + screenHeight) {
             projectile.shouldDestroy = true;
         }
+    }
+    
+    // Update all health packs
+    for (auto& healthPack : healthPacks) {
+        healthPack.update(dt);
+    }
+    
+    // Update HP UI animation
+    hpUIAnimTimer += dt;
+    if (hpUIAnimTimer >= 0.1667f) {  // 6 FPS
+        hpUIAnimTimer -= 0.1667f;
+        hpUIFrame = (hpUIFrame + 1) % 12;
     }
     
     // Check player projectile vs basic enemy collisions
@@ -181,6 +232,14 @@ void Game::update() {
         if (projectile.getCollider().intersects(player.getCollider())) {
             projectile.shouldDestroy = true;
             player.health -= 1;
+        }
+    }
+    
+    // Check health pack collisions
+    for (auto& healthPack : healthPacks) {
+        if (healthPack.active && healthPack.getCollider().intersects(player.getCollider())) {
+            player.health += 1;
+            healthPack.active = false;
         }
     }
     
@@ -217,6 +276,12 @@ void Game::update() {
     
     // Check portal collisions
     checkPortalCollisions();
+    
+    // Check player death
+    if (player.health <= 0) {
+        loadLevel(currentLevelName);
+        player.health = 1;
+    }
 }
 
 void Game::checkPortalCollisions() {
@@ -302,6 +367,13 @@ void Game::render() {
         }
     }
     
+    // Draw health packs
+    for (const auto& healthPack : healthPacks) {
+        if (healthPack.active) {
+            healthPack.render(renderer, healthPackSpritesheet, camX, camY);
+        }
+    }
+    
     // Draw enemy projectiles
     for (const auto& projectile : enemyProjectiles) {
         Rect dstRect = projectile.getCollider();
@@ -361,6 +433,22 @@ void Game::render() {
         // Fallback if texture fails to load
         renderer->drawRect(dstRect, Color(255, 0, 0), true);
     }
+    
+    // Draw HP counter UI in top-left corner
+    if (energySpritesheet >= 0) {
+        int frameX = (hpUIFrame % 4) * 16;
+        int frameY = (hpUIFrame / 4) * 16;
+        Rect srcRect(frameX, frameY, 16, 16);
+        Rect dstRect(8, 8, 16, 16);
+        
+        renderer->drawSprite(energySpritesheet, srcRect, dstRect, false);
+    } else {
+        Rect hpIconRect(8, 8, 16, 16);
+        renderer->drawRect(hpIconRect, Color(255, 0, 0), true);
+    }
+    
+    std::string hpText = std::to_string(player.health) + "x";
+    renderer->drawText(hpText, 28, 10, Color(255, 255, 255));
     
     renderer->endFrame();
 }

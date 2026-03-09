@@ -22,6 +22,7 @@ set(GAME_SOURCES
     src/game/enemy/BasicEnemy.cpp
     src/game/enemy/RangedEnemy.cpp
     src/game/enemy/EnemyProjectile.cpp
+    src/game/healthpack/HealthPack.cpp
     src/game/physics/Physics.cpp
     src/game/physics/Collision.cpp
     src/game/level/Level.cpp
@@ -34,6 +35,7 @@ set(GAME_SOURCES
 if(TARGET_PLATFORM STREQUAL "desktop")
     find_package(SDL2 REQUIRED)
     find_package(SDL2_image REQUIRED)
+    find_package(SDL2_ttf REQUIRED)
     
     add_executable(platformer
         ${GAME_SOURCES}
@@ -49,7 +51,7 @@ if(TARGET_PLATFORM STREQUAL "desktop")
         ${SDL2_INCLUDE_DIRS}
     )
     
-    target_link_libraries(platformer PRIVATE ${SDL2_LIBRARIES} SDL2_image::SDL2_image)
+    target_link_libraries(platformer PRIVATE ${SDL2_LIBRARIES} SDL2_image::SDL2_image SDL2_ttf::SDL2_ttf)
 
 # ---------------------------
 # Pico build (future)

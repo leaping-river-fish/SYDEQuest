@@ -1,9 +1,32 @@
 #include "DesktopRenderer.h"
 #include <SDL2/SDL_image.h>
+#include <stdexcept>
 
 DesktopRenderer::DesktopRenderer(SDL_Renderer* renderer, int w, int h)
-    : renderer(renderer), screenWidth(w), screenHeight(h)
+    : renderer(renderer), screenWidth(w), screenHeight(h), font(nullptr)
 {
+    if (TTF_Init() == -1) {
+        throw std::runtime_error("Failed to initialize SDL_ttf");
+    }
+    
+    font = TTF_OpenFont("assets/fonts/arial.ttf", 12);
+    if (!font) {
+        font = TTF_OpenFont("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 12);
+    }
+    if (!font) {
+        font = TTF_OpenFont("C:\\Windows\\Fonts\\arial.ttf", 12);
+    }
+    if (!font) {
+        TTF_Quit();
+        throw std::runtime_error("Failed to load font");
+    }
+}
+
+DesktopRenderer::~DesktopRenderer() {
+    if (font) {
+        TTF_CloseFont(font);
+    }
+    TTF_Quit();
 }
 
 void DesktopRenderer::beginFrame() {
@@ -104,4 +127,25 @@ void DesktopRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect&
     
     SDL_RendererFlip flip = flipHorizontal ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
     SDL_RenderCopyEx(renderer, textures[textureID], &src, &dst, 0.0, nullptr, flip);
+}
+
+void DesktopRenderer::drawText(const std::string& text, int x, int y, Color color) {
+    if (!font || text.empty()) {
+        return;
+    }
+    
+    SDL_Color sdlColor = {color.r, color.g, color.b, color.a};
+    SDL_Surface* surface = TTF_RenderText_Solid(font, text.c_str(), sdlColor);
+    if (!surface) {
+        return;
+    }
+    
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    if (texture) {
+        SDL_Rect dstRect = {x, y, surface->w, surface->h};
+        SDL_RenderCopy(renderer, texture, nullptr, &dstRect);
+        SDL_DestroyTexture(texture);
+    }
+    
+    SDL_FreeSurface(surface);
 }

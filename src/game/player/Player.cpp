@@ -7,6 +7,7 @@ Player::Player()
       wantsToDropThrough(false),
       wantsToFire(false),
       health(3),
+      invincibilityTimer(0.0f),
       currentFrame(1),
       animationTimer(0.0f),
       facingRight(true)
@@ -14,6 +15,11 @@ Player::Player()
 }
 
 void Player::update(float deltaTime) {
+    // Update invincibility timer
+    if (invincibilityTimer > 0.0f) {
+        invincibilityTimer -= deltaTime;
+    }
+    
     // Update facing direction based on movement
     if (velocity.x > 0) {
         facingRight = true;

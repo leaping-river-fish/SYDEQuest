@@ -44,6 +44,7 @@ public:
     const std::vector<Vec2>& getEnemySpawns() const { return enemySpawns; }
     const std::vector<Vec2>& getBasicEnemySpawns() const { return basicEnemySpawns; }
     const std::vector<Vec2>& getRangedEnemySpawns() const { return rangedEnemySpawns; }
+    const std::vector<Vec2>& getHealthPackSpawns() const { return healthPackSpawns; }
 
 private:
     int width;
@@ -54,6 +55,7 @@ private:
     std::vector<Vec2> enemySpawns;  // Legacy: maps to basicEnemySpawns
     std::vector<Vec2> basicEnemySpawns;
     std::vector<Vec2> rangedEnemySpawns;
+    std::vector<Vec2> healthPackSpawns;
 
     void loadTestLevel();
 };

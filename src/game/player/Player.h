@@ -9,6 +9,7 @@ public:
     static constexpr float JUMP_VELOCITY = -450.0f;  // Jump height: 5+ tiles (~84 pixels)
     static constexpr float FRAME_TIME = 0.0556f;  // 18 FPS animation
     static constexpr int TOTAL_FRAMES = 12;
+    static constexpr float INVINCIBILITY_DURATION = 1.0f;
     
     Vec2 position;
     Vec2 velocity;
@@ -17,6 +18,7 @@ public:
     bool wantsToDropThrough;  // For one-way platforms
     bool wantsToFire;  // Request to fire projectile
     int health;
+    float invincibilityTimer;
     
     // Animation state
     int currentFrame;
