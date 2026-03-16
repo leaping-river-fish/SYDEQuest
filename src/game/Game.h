@@ -60,10 +60,15 @@ private:
     int enemyProjectileRightSpritesheet;
     int energySpritesheet;
     int healthPackSpritesheet;
+    int portalSpritesheet;
     
     // HP UI animation state
     int hpUIFrame;
     float hpUIAnimTimer;
+    
+    // Portal animation state
+    int portalFrame;
+    float portalAnimTimer;
     
     // Current level tracking
     char currentLevelName[64];

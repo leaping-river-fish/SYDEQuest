@@ -20,8 +20,11 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       enemyProjectileRightSpritesheet(-1),
       energySpritesheet(-1),
       healthPackSpritesheet(-1),
+      portalSpritesheet(-1),
       hpUIFrame(0),
-      hpUIAnimTimer(0.0f)
+      hpUIAnimTimer(0.0f),
+      portalFrame(0),
+      portalAnimTimer(0.0f)
 {
     currentLevelName[0] = '\0';
 }
@@ -39,6 +42,7 @@ void Game::init() {
     enemyProjectileRightSpritesheet = renderer->loadTexture("../assets/IntegralSpinRight.png");
     energySpritesheet = renderer->loadTexture("../assets/Energy.png");
     healthPackSpritesheet = renderer->loadTexture("../assets/EnergyDrink.png");
+    portalSpritesheet = renderer->loadTexture("../assets/PortalSpriteSheet.png");
 }
 
 bool Game::loadLevel(const char* levelName) {
@@ -205,6 +209,13 @@ void Game::update() {
         hpUIFrame = (hpUIFrame + 1) % 12;
     }
     
+    // Update portal animation
+    portalAnimTimer += dt;
+    if (portalAnimTimer >= 0.1667f) {  // 6 FPS
+        portalAnimTimer -= 0.1667f;
+        portalFrame = (portalFrame + 1) % 12;
+    }
+    
     // Check player projectile vs basic enemy collisions
     for (auto& projectile : projectiles) {
         for (auto& enemy : basicEnemies) {
@@ -325,6 +336,26 @@ void Game::render() {
             if (tileId != -1) {
                 renderer->drawTile(x, y, tileId, terrainSpritesheet, camX, camY);
             }
+        }
+    }
+    
+    // Draw portals with animation
+    const std::vector<Portal>& portals = level.getPortals();
+    for (const Portal& portal : portals) {
+        Rect dstRect = portal.bounds;
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        if (portalSpritesheet >= 0) {
+            // Calculate source rect (12 frames in 4x3 grid, 32x32 each)
+            int frameX = (portalFrame % 4) * 32;
+            int frameY = (portalFrame / 4) * 32;
+            Rect srcRect(frameX, frameY, 32, 32);
+            
+            renderer->drawSprite(portalSpritesheet, srcRect, dstRect, false);
+        } else {
+            // Fallback to cyan rectangle if texture fails to load
+            renderer->drawRect(dstRect, Color(0, 255, 255), true);
         }
     }
     
