@@ -2,6 +2,8 @@ add bosses and levels
 
 Implement objectives: Collect parts
 
+BOSSES:
+
 ROBERT HUNTER - LASER BEAMS/OPTICS (WALL BOUNCING LASERS?) Electromagnetic wave shield?
 
 SEAN SPEZIALE - INTEGRALS AND SIN/COS WAVES, Summons calc quizzes 
@@ -10,5 +12,7 @@ CALVIN YOUNG - WRENCHES, WIRES, MACHINERY? projectiles that explode with shrapne
 
 
 Beautify:
+
+Make Logo
 
 Add Start Screen
