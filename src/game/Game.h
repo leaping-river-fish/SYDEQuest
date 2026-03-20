@@ -6,6 +6,7 @@
 #include "enemy/RangedEnemy.h"
 #include "enemy/EnemyProjectile.h"
 #include "healthpack/HealthPack.h"
+#include "objective/Objective.h"
 #include "level/Level.h"
 #include "level/Camera.h"
 #include "physics/Physics.h"
@@ -48,6 +49,7 @@ private:
     std::vector<RangedEnemy> rangedEnemies;
     std::vector<EnemyProjectile> enemyProjectiles;
     std::vector<HealthPack> healthPacks;
+    std::vector<Objective> objectives;
     
     // Assets
     int playerSpritesheet;
@@ -61,6 +63,12 @@ private:
     int energySpritesheet;
     int healthPackSpritesheet;
     int portalSpritesheet;
+    int chargerSpritesheet;
+    int enclosureSpritesheet;
+    int hapticSpritesheet;
+    int partsSpritesheet;
+    int screenSpritesheet;
+    int picoSpritesheet;
     
     // HP UI animation state
     int hpUIFrame;
@@ -73,6 +81,10 @@ private:
     // Current level tracking
     char currentLevelName[64];
     
+    // Objective tracking
+    bool levelObjectiveCollected;
+    
     void checkPortalCollisions();
+    int getObjectiveSpritesheet(ObjectiveType type) const;
 };
 

@@ -21,10 +21,17 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       energySpritesheet(-1),
       healthPackSpritesheet(-1),
       portalSpritesheet(-1),
+      chargerSpritesheet(-1),
+      enclosureSpritesheet(-1),
+      hapticSpritesheet(-1),
+      partsSpritesheet(-1),
+      screenSpritesheet(-1),
+      picoSpritesheet(-1),
       hpUIFrame(0),
       hpUIAnimTimer(0.0f),
       portalFrame(0),
-      portalAnimTimer(0.0f)
+      portalAnimTimer(0.0f),
+      levelObjectiveCollected(false)
 {
     currentLevelName[0] = '\0';
 }
@@ -43,6 +50,12 @@ void Game::init() {
     energySpritesheet = renderer->loadTexture("../assets/Energy.png");
     healthPackSpritesheet = renderer->loadTexture("../assets/EnergyDrink.png");
     portalSpritesheet = renderer->loadTexture("../assets/PortalSpriteSheet.png");
+    chargerSpritesheet = renderer->loadTexture("../assets/ChargerSprite.png");
+    enclosureSpritesheet = renderer->loadTexture("../assets/EnclosureSprite.png");
+    hapticSpritesheet = renderer->loadTexture("../assets/HapticSprite.png");
+    partsSpritesheet = renderer->loadTexture("../assets/PartsSprite.png");
+    screenSpritesheet = renderer->loadTexture("../assets/ScreenSprite.png");
+    picoSpritesheet = renderer->loadTexture("../assets/PicoSprite.png");
 }
 
 bool Game::loadLevel(const char* levelName) {
@@ -62,6 +75,7 @@ bool Game::loadLevel(const char* levelName) {
     rangedEnemies.clear();
     enemyProjectiles.clear();
     healthPacks.clear();
+    objectives.clear();
     
     // Spawn basic enemies from level data
     const std::vector<Vec2>& basicEnemySpawnPoints = level.getBasicEnemySpawns();
@@ -79,6 +93,13 @@ bool Game::loadLevel(const char* levelName) {
     const std::vector<Vec2>& healthPackSpawnPoints = level.getHealthPackSpawns();
     for (const Vec2& spawnPos : healthPackSpawnPoints) {
         healthPacks.push_back(HealthPack(spawnPos));
+    }
+    
+    // Spawn objectives from level data
+    levelObjectiveCollected = false;
+    const std::vector<std::pair<Vec2, ObjectiveType>>& objectiveSpawnPoints = level.getObjectiveSpawns();
+    for (const auto& [spawnPos, type] : objectiveSpawnPoints) {
+        objectives.push_back(Objective(spawnPos, type));
     }
     
     camera.follow(player, level);
@@ -254,6 +275,14 @@ void Game::update() {
         }
     }
     
+    // Check objective collisions
+    for (auto& objective : objectives) {
+        if (!objective.collected && objective.getCollider().intersects(player.getCollider())) {
+            objective.collected = true;
+            levelObjectiveCollected = true;
+        }
+    }
+    
     // Remove destroyed projectiles
     projectiles.erase(
         std::remove_if(projectiles.begin(), projectiles.end(),
@@ -301,6 +330,10 @@ void Game::checkPortalCollisions() {
     
     for (const Portal& portal : portals) {
         if (playerRect.intersects(portal.bounds)) {
+            // Check if level has objectives and if they're collected
+            if (!objectives.empty() && !levelObjectiveCollected) {
+                return;
+            }
             loadLevel(portal.targetLevel);
             break;
         }
@@ -405,6 +438,14 @@ void Game::render() {
         }
     }
     
+    // Draw objectives
+    for (const auto& objective : objectives) {
+        if (!objective.collected) {
+            int spritesheet = getObjectiveSpritesheet(objective.type);
+            objective.render(renderer, spritesheet, camX, camY);
+        }
+    }
+    
     // Draw enemy projectiles
     for (const auto& projectile : enemyProjectiles) {
         Rect dstRect = projectile.getCollider();
@@ -481,6 +522,36 @@ void Game::render() {
     std::string hpText = std::to_string(player.health) + "x";
     renderer->drawText(hpText, 28, 10, Color(255, 255, 255));
     
+    // Draw objective UI if level has objectives
+    if (!objectives.empty()) {
+        const Objective& objective = objectives[0];
+        int spritesheet = getObjectiveSpritesheet(objective.type);
+        
+        // Draw objective sprite icon
+        Rect iconDst(8, 28, 16, 16);
+        if (spritesheet >= 0) {
+            Rect iconSrc(0, 0, 16, 16);
+            renderer->drawSprite(spritesheet, iconSrc, iconDst, false);
+        } else {
+            renderer->drawRect(iconDst, Color(255, 255, 0), true);
+        }
+        
+        // Draw collection status
+        std::string statusText = levelObjectiveCollected ? "1/1" : "0/1";
+        renderer->drawText(statusText, 28, 30, Color(255, 255, 255));
+    }
+    
     renderer->endFrame();
 }
 
+int Game::getObjectiveSpritesheet(ObjectiveType type) const {
+    switch (type) {
+        case ObjectiveType::CHARGER: return chargerSpritesheet;
+        case ObjectiveType::ENCLOSURE: return enclosureSpritesheet;
+        case ObjectiveType::HAPTIC: return hapticSpritesheet;
+        case ObjectiveType::PARTS: return partsSpritesheet;
+        case ObjectiveType::SCREEN: return screenSpritesheet;
+        case ObjectiveType::PICO: return picoSpritesheet;
+        default: return -1;
+    }
+}

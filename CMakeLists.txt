@@ -23,6 +23,7 @@ set(GAME_SOURCES
     src/game/enemy/RangedEnemy.cpp
     src/game/enemy/EnemyProjectile.cpp
     src/game/healthpack/HealthPack.cpp
+    src/game/objective/Objective.cpp
     src/game/physics/Physics.cpp
     src/game/physics/Collision.cpp
     src/game/level/Level.cpp

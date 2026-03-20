@@ -1,4 +1,5 @@
 #include "Level.h"
+#include "../objective/Objective.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +24,7 @@ void Level::unload() {
     basicEnemySpawns.clear();
     rangedEnemySpawns.clear();
     healthPackSpawns.clear();
+    objectiveSpawns.clear();
 }
 
 int8_t Level::getTileId(int tileX, int tileY) const {
@@ -158,6 +160,28 @@ bool Level::loadFromFile(const char* filename) {
             float hx, hy;
             if (sscanf(line + 12, "%f %f", &hx, &hy) == 2) {
                 healthPackSpawns.push_back(Vec2(hx, hy));
+            }
+        } else if (strncmp(line, "OBJECTIVE ", 10) == 0) {
+            float ox, oy;
+            char typeStr[32];
+            if (sscanf(line + 10, "%f %f %s", &ox, &oy, typeStr) == 3) {
+                ObjectiveType type;
+                if (strcmp(typeStr, "CHARGER") == 0) {
+                    type = ObjectiveType::CHARGER;
+                } else if (strcmp(typeStr, "ENCLOSURE") == 0) {
+                    type = ObjectiveType::ENCLOSURE;
+                } else if (strcmp(typeStr, "HAPTIC") == 0) {
+                    type = ObjectiveType::HAPTIC;
+                } else if (strcmp(typeStr, "PARTS") == 0) {
+                    type = ObjectiveType::PARTS;
+                } else if (strcmp(typeStr, "SCREEN") == 0) {
+                    type = ObjectiveType::SCREEN;
+                } else if (strcmp(typeStr, "PICO") == 0) {
+                    type = ObjectiveType::PICO;
+                } else {
+                    continue;
+                }
+                objectiveSpawns.push_back(std::make_pair(Vec2(ox, oy), type));
             }
         }
     }

@@ -1,7 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include <utility>
 #include "../../core/types.h"
+
+// Forward declare ObjectiveType from Objective.h
+enum class ObjectiveType;
 
 // Tile IDs from Tiled map editor:
 // -1: Air (empty space)
@@ -45,6 +49,7 @@ public:
     const std::vector<Vec2>& getBasicEnemySpawns() const { return basicEnemySpawns; }
     const std::vector<Vec2>& getRangedEnemySpawns() const { return rangedEnemySpawns; }
     const std::vector<Vec2>& getHealthPackSpawns() const { return healthPackSpawns; }
+    const std::vector<std::pair<Vec2, ObjectiveType>>& getObjectiveSpawns() const { return objectiveSpawns; }
 
 private:
     int width;
@@ -56,6 +61,7 @@ private:
     std::vector<Vec2> basicEnemySpawns;
     std::vector<Vec2> rangedEnemySpawns;
     std::vector<Vec2> healthPackSpawns;
+    std::vector<std::pair<Vec2, ObjectiveType>> objectiveSpawns;
 
     void loadTestLevel();
 };
