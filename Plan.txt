@@ -16,3 +16,7 @@ Beautify:
 Make Logo
 
 Add Start Screen
+
+Fix sprite rendering FOR PICO <--------------------- THE ISSUE
+
+Rendering rate SPI Try 40 -> 10-30 MHz decrease MHz

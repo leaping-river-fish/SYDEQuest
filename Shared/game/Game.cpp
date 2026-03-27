@@ -1,0 +1,984 @@
+#include "Game.h"
+#include "../core/IRenderer.h"
+#include "../core/IInput.h"
+#include "../core/IHaptics.h"
+#include "../core/ITimer.h"
+#include <algorithm>
+#include <cstring>
+#include <cstdio>
+
+#ifndef PLATFORM_PICO
+    #include <string>
+#endif
+
+#ifdef PLATFORM_PICO
+inline fixed_t distanceSquared(const Vec2& a, const Vec2& b) {
+    fixed_t dx = a.x - b.x;
+    fixed_t dy = a.y - b.y;
+    return FIXED_MUL(dx, dx) + FIXED_MUL(dy, dy);
+}
+#else
+inline float distanceSquared(const Vec2& a, const Vec2& b) {
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+#endif
+
+Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
+    : renderer(r), input(i), haptics(h), timer(t),
+      camera(r->getScreenWidth(), r->getScreenHeight()),
+      playerSpritesheet(-1),
+      projectileLeftSpritesheet(-1),
+      projectileRightSpritesheet(-1),
+      terrainSpritesheet(-1),
+      basicEnemySpritesheet(-1),
+      rangedEnemySpritesheet(-1),
+      enemyProjectileLeftSpritesheet(-1),
+      enemyProjectileRightSpritesheet(-1),
+      energySpritesheet(-1),
+      healthPackSpritesheet(-1),
+      portalSpritesheet(-1),
+      chargerSpritesheet(-1),
+      enclosureSpritesheet(-1),
+      hapticSpritesheet(-1),
+      partsSpritesheet(-1),
+      screenSpritesheet(-1),
+      picoSpritesheet(-1),
+      hpUIFrame(0),
+      hpUIAnimTimer(0.0f),
+      portalFrame(0),
+      portalAnimTimer(0.0f),
+      levelObjectiveCollected(false)
+{
+    currentLevelName[0] = '\0';
+}
+
+void Game::init() {
+    loadLevel("../levels/Level1.csv");
+    
+    playerSpritesheet = renderer->loadTexture("../assets/AlternatingWalk.png");
+    projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
+    projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
+    terrainSpritesheet = renderer->loadTexture("../assets/FullTerrainSpriteSheet.png");
+    basicEnemySpritesheet = renderer->loadTexture("../assets/Circle.png");
+    rangedEnemySpritesheet = renderer->loadTexture("../assets/CalcQuiz.png");
+    enemyProjectileLeftSpritesheet = renderer->loadTexture("../assets/IntegralSpinLeft.png");
+    enemyProjectileRightSpritesheet = renderer->loadTexture("../assets/IntegralSpinRight.png");
+    energySpritesheet = renderer->loadTexture("../assets/Energy.png");
+    healthPackSpritesheet = renderer->loadTexture("../assets/EnergyDrink.png");
+    portalSpritesheet = renderer->loadTexture("../assets/PortalSpriteSheet.png");
+    chargerSpritesheet = renderer->loadTexture("../assets/ChargerSprite.png");
+    enclosureSpritesheet = renderer->loadTexture("../assets/EnclosureSprite.png");
+    hapticSpritesheet = renderer->loadTexture("../assets/HapticSprite.png");
+    partsSpritesheet = renderer->loadTexture("../assets/PartsSprite.png");
+    screenSpritesheet = renderer->loadTexture("../assets/ScreenSprite.png");
+    picoSpritesheet = renderer->loadTexture("../assets/PicoSprite.png");
+}
+
+bool Game::loadLevel(const char* levelName) {
+    if (!level.loadFromFile(levelName)) {
+        return false;
+    }
+    
+    strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
+    currentLevelName[sizeof(currentLevelName) - 1] = '\0';
+    
+    player.position = level.getSpawnPoint();
+    player.velocity = Vec2(0.0f, 0.0f);
+    player.setGrounded(false);
+    
+#ifdef PLATFORM_PICO
+    projectiles.clear();
+    basicEnemies.clear();
+    rangedEnemies.clear();
+    enemyProjectiles.clear();
+    healthPacks.clear();
+    objectives.clear();
+    
+    for (size_t i = 0; i < 25; i++) {
+        basicEnemyStates[i].isActive = false;
+        basicEnemyStates[i].wasRendered = false;
+    }
+    for (size_t i = 0; i < 20; i++) {
+        rangedEnemyStates[i].isActive = false;
+        rangedEnemyStates[i].wasRendered = false;
+    }
+    for (size_t i = 0; i < 1; i++) {
+        healthPackStates[i].isActive = false;
+        healthPackStates[i].wasRendered = false;
+    }
+    for (size_t i = 0; i < 1; i++) {
+        objectiveStates[i].isActive = false;
+        objectiveStates[i].wasRendered = false;
+    }
+#else
+    projectiles.clear();
+    basicEnemies.clear();
+    rangedEnemies.clear();
+    enemyProjectiles.clear();
+    healthPacks.clear();
+    objectives.clear();
+#endif
+    
+    // Spawn basic enemies from level data
+#ifdef PLATFORM_PICO
+    const Vec2* basicEnemySpawnPoints = level.getBasicEnemySpawns();
+    uint8_t basicEnemyCount = level.getBasicEnemySpawnCount();
+    for (uint8_t i = 0; i < basicEnemyCount; i++) {
+        BasicEnemy* enemy = basicEnemies.allocate();
+        if (enemy) {
+            *enemy = BasicEnemy(basicEnemySpawnPoints[i], true);
+        }
+    }
+    
+    const Vec2* rangedEnemySpawnPoints = level.getRangedEnemySpawns();
+    uint8_t rangedEnemyCount = level.getRangedEnemySpawnCount();
+    for (uint8_t i = 0; i < rangedEnemyCount; i++) {
+        RangedEnemy* enemy = rangedEnemies.allocate();
+        if (enemy) {
+            *enemy = RangedEnemy(rangedEnemySpawnPoints[i], true);
+        }
+    }
+    
+    const Vec2* healthPackSpawnPoints = level.getHealthPackSpawns();
+    uint8_t healthPackCount = level.getHealthPackSpawnCount();
+    for (uint8_t i = 0; i < healthPackCount; i++) {
+        HealthPack* pack = healthPacks.allocate();
+        if (pack) {
+            *pack = HealthPack(healthPackSpawnPoints[i]);
+        }
+    }
+    
+    levelObjectiveCollected = false;
+    const Vec2* objectiveSpawnPoints = level.getObjectiveSpawns();
+    const ObjectiveType* objectiveTypes = level.getObjectiveTypes();
+    uint8_t objectiveCount = level.getObjectiveSpawnCount();
+    for (uint8_t i = 0; i < objectiveCount; i++) {
+        Objective* obj = objectives.allocate();
+        if (obj) {
+            *obj = Objective(objectiveSpawnPoints[i], objectiveTypes[i]);
+        }
+    }
+#else
+    const std::vector<Vec2>& basicEnemySpawnPoints = level.getBasicEnemySpawns();
+    for (const Vec2& spawnPos : basicEnemySpawnPoints) {
+        basicEnemies.push_back(BasicEnemy(spawnPos, true));
+    }
+    
+    const std::vector<Vec2>& rangedEnemySpawnPoints = level.getRangedEnemySpawns();
+    for (const Vec2& spawnPos : rangedEnemySpawnPoints) {
+        rangedEnemies.push_back(RangedEnemy(spawnPos, true));
+    }
+    
+    const std::vector<Vec2>& healthPackSpawnPoints = level.getHealthPackSpawns();
+    for (const Vec2& spawnPos : healthPackSpawnPoints) {
+        healthPacks.push_back(HealthPack(spawnPos));
+    }
+    
+    levelObjectiveCollected = false;
+    const std::vector<std::pair<Vec2, ObjectiveType>>& objectiveSpawnPoints = level.getObjectiveSpawns();
+    for (const auto& [spawnPos, type] : objectiveSpawnPoints) {
+        objectives.push_back(Objective(spawnPos, type));
+    }
+#endif
+    
+    camera.follow(player, level);
+    
+    return true;
+}
+
+void Game::update() {
+    timer->update();
+    input->update();
+    
+    float dt = timer->getDeltaTime();
+    
+    // Input player actions
+    controller.update(player, input, dt);
+    
+    // Physics
+    physics.applyGravity(player, dt);
+    physics.clampVelocity(player);
+    
+    // Move X and resolve
+#ifdef PLATFORM_PICO
+    fixed_t dtFixed = floatToFixed(dt);
+    player.position.x += FIXED_MUL(player.velocity.x, dtFixed);
+#else
+    player.position.x += player.velocity.x * dt;
+#endif
+    collision.resolveHorizontal(player, level);
+    
+    // Move Y and resolve
+    player.setGrounded(false);
+#ifdef PLATFORM_PICO
+    player.position.y += FIXED_MUL(player.velocity.y, dtFixed);
+#else
+    player.position.y += player.velocity.y * dt;
+#endif
+    collision.resolveVertical(player, level);
+    
+    // Update animation/state
+    player.update(dt);
+    
+    // Handle projectile spawning
+    if (player.wantsToFire()) {
+        Vec2 spawnPos = player.position;
+#ifdef PLATFORM_PICO
+        spawnPos.x += player.facingRight() ? Player::WIDTH : TO_FIXED(0.0f);
+        spawnPos.y += FIXED_DIV(Player::HEIGHT, TO_FIXED(2.0f)) - FIXED_DIV(Projectile::HEIGHT, TO_FIXED(2.0f));
+        
+        Projectile* newProjectile = projectiles.allocate();
+        if (newProjectile) {
+            *newProjectile = Projectile(spawnPos, player.facingRight());
+        }
+#else
+        spawnPos.x += player.facingRight() ? Player::WIDTH : 0;
+        spawnPos.y += Player::HEIGHT / 2 - Projectile::HEIGHT / 2;
+        projectiles.push_back(Projectile(spawnPos, player.facingRight()));
+#endif
+    }
+    
+    // Update all projectiles
+    int camX = camera.getOffsetX();
+    int camY = camera.getOffsetY();
+    int screenWidth = renderer->getScreenWidth();
+    int screenHeight = renderer->getScreenHeight();
+    
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < projectiles.size(); i++) {
+        if (!projectiles.isActive(i)) continue;
+        
+        projectiles[i].update(dt);
+        
+        if (collision.checkProjectileTileCollision(projectiles[i], level)) {
+            projectiles[i].shouldDestroy = true;
+        }
+        
+        fixed_t projX = projectiles[i].position.x;
+        fixed_t projY = projectiles[i].position.y;
+        fixed_t camXFixed = TO_FIXED(camX);
+        fixed_t camYFixed = TO_FIXED(camY);
+        if (projX < camXFixed || projX > camXFixed + TO_FIXED(screenWidth) ||
+            projY < camYFixed || projY > camYFixed + TO_FIXED(screenHeight)) {
+            projectiles[i].shouldDestroy = true;
+        }
+    }
+#else
+    for (auto& projectile : projectiles) {
+        projectile.update(dt);
+        
+        if (collision.checkProjectileTileCollision(projectile, level)) {
+            projectile.shouldDestroy = true;
+        }
+        
+        float projX = projectile.position.x;
+        float projY = projectile.position.y;
+        if (projX < camX || projX > camX + screenWidth ||
+            projY < camY || projY > camY + screenHeight) {
+            projectile.shouldDestroy = true;
+        }
+    }
+#endif
+    
+    // Update all basic enemies (with culling on Pico)
+#ifdef PLATFORM_PICO
+    fixed_t activationDistSq = FIXED_MUL(ACTIVATION_DISTANCE, ACTIVATION_DISTANCE);
+    fixed_t deactivationDistSq = FIXED_MUL(DEACTIVATION_DISTANCE, DEACTIVATION_DISTANCE);
+    
+    for (size_t i = 0; i < basicEnemies.count; i++) {
+        if (!basicEnemies.isActive(i)) continue;
+        
+        fixed_t distSq = distanceSquared(player.position, basicEnemies[i].position);
+        
+        if (distSq < activationDistSq) {
+            basicEnemyStates[i].isActive = true;
+        } else if (distSq > deactivationDistSq) {
+            basicEnemyStates[i].isActive = false;
+        }
+        
+        if (basicEnemyStates[i].isActive) {
+            basicEnemies[i].update(dt, level);
+        }
+    }
+#else
+    for (auto& enemy : basicEnemies) {
+        float distSq = distanceSquared(player.position, enemy.position);
+        if (distSq < DEACTIVATION_DISTANCE * DEACTIVATION_DISTANCE) {
+            enemy.update(dt, level);
+        }
+    }
+#endif
+    
+    // Update all ranged enemies (with culling on Pico)
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < rangedEnemies.count; i++) {
+        if (!rangedEnemies.isActive(i)) continue;
+        
+        fixed_t distSq = distanceSquared(player.position, rangedEnemies[i].position);
+        
+        if (distSq < activationDistSq) {
+            rangedEnemyStates[i].isActive = true;
+        } else if (distSq > deactivationDistSq) {
+            rangedEnemyStates[i].isActive = false;
+        }
+        
+        if (rangedEnemyStates[i].isActive) {
+            rangedEnemies[i].update(dt, level, player, enemyProjectiles);
+        }
+    }
+#else
+    for (auto& enemy : rangedEnemies) {
+        float distSq = distanceSquared(player.position, enemy.position);
+        if (distSq < DEACTIVATION_DISTANCE * DEACTIVATION_DISTANCE) {
+            enemy.update(dt, level, player, enemyProjectiles);
+        }
+    }
+#endif
+    
+    // Check enemy collision damage
+    if (player.invincibilityTimer <= 0.0f) {
+        Rect playerRect = player.getCollider();
+        
+#ifdef PLATFORM_PICO
+        for (size_t i = 0; i < basicEnemies.size(); i++) {
+            if (!basicEnemies.isActive(i)) continue;
+            if (playerRect.intersects(basicEnemies[i].getCollider())) {
+                player.health -= 1;
+                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                break;
+            }
+        }
+        
+        if (player.invincibilityTimer <= 0.0f) {
+            for (size_t i = 0; i < rangedEnemies.size(); i++) {
+                if (!rangedEnemies.isActive(i)) continue;
+                if (playerRect.intersects(rangedEnemies[i].getCollider())) {
+                    player.health -= 1;
+                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    break;
+                }
+            }
+        }
+#else
+        for (const auto& enemy : basicEnemies) {
+            if (playerRect.intersects(enemy.getCollider())) {
+                player.health -= 1;
+                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                break;
+            }
+        }
+        
+        if (player.invincibilityTimer <= 0.0f) {
+            for (const auto& enemy : rangedEnemies) {
+                if (playerRect.intersects(enemy.getCollider())) {
+                    player.health -= 1;
+                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    break;
+                }
+            }
+        }
+#endif
+    }
+    
+    // Update all enemy projectiles
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < enemyProjectiles.size(); i++) {
+        if (!enemyProjectiles.isActive(i)) continue;
+        
+        enemyProjectiles[i].update(dt);
+        
+        if (collision.checkEnemyProjectileTileCollision(enemyProjectiles[i], level)) {
+            enemyProjectiles[i].shouldDestroy = true;
+        }
+        
+        fixed_t projX = enemyProjectiles[i].position.x;
+        fixed_t projY = enemyProjectiles[i].position.y;
+        fixed_t camXFixed = TO_FIXED(camX);
+        fixed_t camYFixed = TO_FIXED(camY);
+        if (projX < camXFixed || projX > camXFixed + TO_FIXED(screenWidth) ||
+            projY < camYFixed || projY > camYFixed + TO_FIXED(screenHeight)) {
+            enemyProjectiles[i].shouldDestroy = true;
+        }
+    }
+#else
+    for (auto& projectile : enemyProjectiles) {
+        projectile.update(dt);
+        
+        if (collision.checkEnemyProjectileTileCollision(projectile, level)) {
+            projectile.shouldDestroy = true;
+        }
+        
+        float projX = projectile.position.x;
+        float projY = projectile.position.y;
+        if (projX < camX || projX > camX + screenWidth ||
+            projY < camY || projY > camY + screenHeight) {
+            projectile.shouldDestroy = true;
+        }
+    }
+#endif
+    
+    // Update all health packs
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < healthPacks.size(); i++) {
+        if (!healthPacks.isActive(i)) continue;
+        healthPacks[i].update(dt);
+    }
+#else
+    for (auto& healthPack : healthPacks) {
+        healthPack.update(dt);
+    }
+#endif
+    
+    // Update HP UI animation
+    hpUIAnimTimer += dt;
+    if (hpUIAnimTimer >= 0.1667f) {  // 6 FPS
+        hpUIAnimTimer -= 0.1667f;
+        hpUIFrame = (hpUIFrame + 1) % 12;
+    }
+    
+    // Update portal animation
+    portalAnimTimer += dt;
+    if (portalAnimTimer >= 0.1667f) {  // 6 FPS
+        portalAnimTimer -= 0.1667f;
+        portalFrame = (portalFrame + 1) % 12;
+    }
+    
+    // Check player projectile vs basic enemy collisions
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < projectiles.size(); i++) {
+        if (!projectiles.isActive(i)) continue;
+        for (size_t j = 0; j < basicEnemies.size(); j++) {
+            if (!basicEnemies.isActive(j)) continue;
+            if (projectiles[i].getCollider().intersects(basicEnemies[j].getCollider())) {
+                projectiles[i].shouldDestroy = true;
+                basicEnemies[j].takeDamage(1);
+                break;
+            }
+        }
+    }
+    
+    for (size_t i = 0; i < projectiles.size(); i++) {
+        if (!projectiles.isActive(i)) continue;
+        for (size_t j = 0; j < rangedEnemies.size(); j++) {
+            if (!rangedEnemies.isActive(j)) continue;
+            if (projectiles[i].getCollider().intersects(rangedEnemies[j].getCollider())) {
+                projectiles[i].shouldDestroy = true;
+                rangedEnemies[j].takeDamage(1);
+                break;
+            }
+        }
+    }
+#else
+    for (auto& projectile : projectiles) {
+        for (auto& enemy : basicEnemies) {
+            if (projectile.getCollider().intersects(enemy.getCollider())) {
+                projectile.shouldDestroy = true;
+                enemy.takeDamage(1);
+                break;
+            }
+        }
+    }
+    
+    for (auto& projectile : projectiles) {
+        for (auto& enemy : rangedEnemies) {
+            if (projectile.getCollider().intersects(enemy.getCollider())) {
+                projectile.shouldDestroy = true;
+                enemy.takeDamage(1);
+                break;
+            }
+        }
+    }
+#endif
+    
+    // Check enemy projectile vs player collisions
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < enemyProjectiles.size(); i++) {
+        if (!enemyProjectiles.isActive(i)) continue;
+        if (enemyProjectiles[i].getCollider().intersects(player.getCollider())) {
+            enemyProjectiles[i].shouldDestroy = true;
+            player.health -= 1;
+        }
+    }
+    
+    for (size_t i = 0; i < healthPacks.size(); i++) {
+        if (!healthPacks.isActive(i)) continue;
+        if (healthPacks[i].active && healthPacks[i].getCollider().intersects(player.getCollider())) {
+            player.health += 1;
+            healthPacks[i].active = false;
+        }
+    }
+    
+    for (size_t i = 0; i < objectives.size(); i++) {
+        if (!objectives.isActive(i)) continue;
+        if (!objectives[i].collected && objectives[i].getCollider().intersects(player.getCollider())) {
+            objectives[i].collected = true;
+            levelObjectiveCollected = true;
+        }
+    }
+#else
+    for (auto& projectile : enemyProjectiles) {
+        if (projectile.getCollider().intersects(player.getCollider())) {
+            projectile.shouldDestroy = true;
+            player.health -= 1;
+        }
+    }
+    
+    for (auto& healthPack : healthPacks) {
+        if (healthPack.active && healthPack.getCollider().intersects(player.getCollider())) {
+            player.health += 1;
+            healthPack.active = false;
+        }
+    }
+    
+    for (auto& objective : objectives) {
+        if (!objective.collected && objective.getCollider().intersects(player.getCollider())) {
+            objective.collected = true;
+            levelObjectiveCollected = true;
+        }
+    }
+#endif
+    
+    // Remove destroyed/dead entities
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < projectiles.size(); i++) {
+        if (projectiles.isActive(i) && projectiles[i].shouldDestroy) {
+            projectiles.free(i);
+        }
+    }
+    
+    for (size_t i = 0; i < enemyProjectiles.size(); i++) {
+        if (enemyProjectiles.isActive(i) && enemyProjectiles[i].shouldDestroy) {
+            enemyProjectiles.free(i);
+        }
+    }
+    
+    for (size_t i = 0; i < basicEnemies.size(); i++) {
+        if (basicEnemies.isActive(i) && basicEnemies[i].health <= 0) {
+            basicEnemies.free(i);
+        }
+    }
+    
+    for (size_t i = 0; i < rangedEnemies.size(); i++) {
+        if (rangedEnemies.isActive(i) && rangedEnemies[i].health <= 0) {
+            rangedEnemies.free(i);
+        }
+    }
+#else
+    projectiles.erase(
+        std::remove_if(projectiles.begin(), projectiles.end(),
+            [](const Projectile& p) { return p.shouldDestroy; }),
+        projectiles.end()
+    );
+    
+    enemyProjectiles.erase(
+        std::remove_if(enemyProjectiles.begin(), enemyProjectiles.end(),
+            [](const EnemyProjectile& p) { return p.shouldDestroy; }),
+        enemyProjectiles.end()
+    );
+    
+    basicEnemies.erase(
+        std::remove_if(basicEnemies.begin(), basicEnemies.end(),
+            [](const BasicEnemy& e) { return e.health <= 0; }),
+        basicEnemies.end()
+    );
+    
+    rangedEnemies.erase(
+        std::remove_if(rangedEnemies.begin(), rangedEnemies.end(),
+            [](const RangedEnemy& e) { return e.health <= 0; }),
+        rangedEnemies.end()
+    );
+#endif
+    
+    // Camera follow
+    camera.follow(player, level);
+    
+    // Check portal collisions
+    checkPortalCollisions();
+    
+    // Check player death
+    if (player.health <= 0) {
+        loadLevel(currentLevelName);
+        player.health = 1;
+    }
+}
+
+void Game::checkPortalCollisions() {
+    Rect playerRect = player.getCollider();
+    
+#ifdef PLATFORM_PICO
+    const Portal* portals = level.getPortals();
+    uint8_t portalCount = level.getPortalCount();
+    
+    for (uint8_t i = 0; i < portalCount; i++) {
+        if (playerRect.intersects(portals[i].bounds)) {
+            bool hasObjectives = false;
+            for (size_t j = 0; j < objectives.size(); j++) {
+                if (objectives.isActive(j)) {
+                    hasObjectives = true;
+                    break;
+                }
+            }
+            if (hasObjectives && !levelObjectiveCollected) {
+                return;
+            }
+            loadLevel(portals[i].targetLevel);
+            break;
+        }
+    }
+#else
+    const std::vector<Portal>& portals = level.getPortals();
+    
+    for (const Portal& portal : portals) {
+        if (playerRect.intersects(portal.bounds)) {
+            if (!objectives.empty() && !levelObjectiveCollected) {
+                return;
+            }
+            loadLevel(portal.targetLevel);
+            break;
+        }
+    }
+#endif
+}
+
+void Game::render() {
+    renderer->beginFrame();
+    
+    int camX = camera.getOffsetX();
+    int camY = camera.getOffsetY();
+    
+    // Calculate visible tile range
+    int screenWidth = renderer->getScreenWidth();
+    int screenHeight = renderer->getScreenHeight();
+    int tileSize = level.getTileSize();
+    
+    int startTileX = camX / tileSize;
+    int startTileY = camY / tileSize;
+    int endTileX = (camX + screenWidth) / tileSize + 1;
+    int endTileY = (camY + screenHeight) / tileSize + 1;
+    
+    // Clamp to level boundaries
+    startTileX = std::max(0, startTileX);
+    startTileY = std::max(0, startTileY);
+    endTileX = std::min(level.getWidthInTiles(), endTileX);
+    endTileY = std::min(level.getHeightInTiles(), endTileY);
+    
+    // Draw only visible level tiles
+    for (int y = startTileY; y < endTileY; y++) {
+        for (int x = startTileX; x < endTileX; x++) {
+            int8_t tileId = level.getTileId(x, y);
+            if (tileId != -1) {
+                renderer->drawTile(x, y, tileId, terrainSpritesheet, camX, camY);
+            }
+        }
+    }
+    
+    // Draw portals with animation
+#ifdef PLATFORM_PICO
+    const Portal* portals = level.getPortals();
+    uint8_t portalCount = level.getPortalCount();
+    for (uint8_t i = 0; i < portalCount; i++) {
+        Rect dstRect = portals[i].bounds;
+        dstRect.x -= TO_FIXED(camX);
+        dstRect.y -= TO_FIXED(camY);
+        
+        if (portalSpritesheet >= 0) {
+            int frameX = (portalFrame % 4) * 32;
+            int frameY = (portalFrame / 4) * 32;
+            Rect srcRect(frameX, frameY, 32, 32);
+            renderer->drawSprite(portalSpritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(0, 255, 255), true);
+        }
+    }
+#else
+    const std::vector<Portal>& portals = level.getPortals();
+    for (const Portal& portal : portals) {
+        Rect dstRect = portal.bounds;
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        if (portalSpritesheet >= 0) {
+            int frameX = (portalFrame % 4) * 32;
+            int frameY = (portalFrame / 4) * 32;
+            Rect srcRect(frameX, frameY, 32, 32);
+            renderer->drawSprite(portalSpritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(0, 255, 255), true);
+        }
+    }
+#endif
+    
+    // Draw basic enemies
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < basicEnemies.size(); i++) {
+        if (!basicEnemies.isActive(i)) continue;
+        
+        Rect dstRect = basicEnemies[i].getCollider();
+        dstRect.x -= TO_FIXED(camX);
+        dstRect.y -= TO_FIXED(camY);
+        
+        if (basicEnemySpritesheet >= 0) {
+            int frameX = (basicEnemies[i].currentFrame % 4) * 16;
+            int frameY = (basicEnemies[i].currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            renderer->drawSprite(basicEnemySpritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(255, 0, 0), true);
+        }
+    }
+    
+    for (size_t i = 0; i < rangedEnemies.size(); i++) {
+        if (!rangedEnemies.isActive(i)) continue;
+        
+        Rect dstRect = rangedEnemies[i].getCollider();
+        dstRect.x -= TO_FIXED(camX);
+        dstRect.y -= TO_FIXED(camY);
+        
+        if (rangedEnemySpritesheet >= 0) {
+            int frameX = (rangedEnemies[i].currentFrame % 4) * 16;
+            int frameY = (rangedEnemies[i].currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            renderer->drawSprite(rangedEnemySpritesheet, srcRect, dstRect, rangedEnemies[i].facingRight());
+        } else {
+            renderer->drawRect(dstRect, Color(255, 128, 0), true);
+        }
+    }
+#else
+    for (const auto& enemy : basicEnemies) {
+        Rect dstRect = enemy.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        if (basicEnemySpritesheet >= 0) {
+            int frameX = (enemy.currentFrame % 4) * 16;
+            int frameY = (enemy.currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            renderer->drawSprite(basicEnemySpritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(255, 0, 0), true);
+        }
+    }
+    
+    for (const auto& enemy : rangedEnemies) {
+        Rect dstRect = enemy.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        if (rangedEnemySpritesheet >= 0) {
+            int frameX = (enemy.currentFrame % 4) * 16;
+            int frameY = (enemy.currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            renderer->drawSprite(rangedEnemySpritesheet, srcRect, dstRect, enemy.facingRight());
+        } else {
+            renderer->drawRect(dstRect, Color(255, 128, 0), true);
+        }
+    }
+#endif
+    
+    // Draw health packs
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < healthPacks.size(); i++) {
+        if (!healthPacks.isActive(i)) continue;
+        if (healthPacks[i].active) {
+            healthPacks[i].render(renderer, healthPackSpritesheet, camX, camY);
+        }
+    }
+    
+    for (size_t i = 0; i < objectives.size(); i++) {
+        if (!objectives.isActive(i)) continue;
+        if (!objectives[i].collected) {
+            int spritesheet = getObjectiveSpritesheet(objectives[i].type);
+            objectives[i].render(renderer, spritesheet, camX, camY);
+        }
+    }
+#else
+    for (const auto& healthPack : healthPacks) {
+        if (healthPack.active) {
+            healthPack.render(renderer, healthPackSpritesheet, camX, camY);
+        }
+    }
+    
+    for (const auto& objective : objectives) {
+        if (!objective.collected) {
+            int spritesheet = getObjectiveSpritesheet(objective.type);
+            objective.render(renderer, spritesheet, camX, camY);
+        }
+    }
+#endif
+    
+    // Draw enemy projectiles
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < enemyProjectiles.size(); i++) {
+        if (!enemyProjectiles.isActive(i)) continue;
+        
+        Rect dstRect = enemyProjectiles[i].getCollider();
+        dstRect.x -= TO_FIXED(camX);
+        dstRect.y -= TO_FIXED(camY);
+        
+        int spritesheet = enemyProjectiles[i].movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
+        
+        if (spritesheet >= 0) {
+            int frameX = (enemyProjectiles[i].currentFrame % 4) * 16;
+            int frameY = (enemyProjectiles[i].currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(128, 0, 255), true);
+        }
+    }
+    
+    for (size_t i = 0; i < projectiles.size(); i++) {
+        if (!projectiles.isActive(i)) continue;
+        
+        Rect dstRect = projectiles[i].getCollider();
+        dstRect.x -= TO_FIXED(camX);
+        dstRect.y -= TO_FIXED(camY);
+        
+        int spritesheet = projectiles[i].movingRight ? projectileRightSpritesheet : projectileLeftSpritesheet;
+        
+        if (spritesheet >= 0) {
+            int frameX = (projectiles[i].currentFrame % 4) * 8;
+            int frameY = (projectiles[i].currentFrame / 4) * 8;
+            Rect srcRect(frameX, frameY, 8, 8);
+            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(255, 200, 0), true);
+        }
+    }
+#else
+    for (const auto& projectile : enemyProjectiles) {
+        Rect dstRect = projectile.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        int spritesheet = projectile.movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
+        
+        if (spritesheet >= 0) {
+            int frameX = (projectile.currentFrame % 4) * 16;
+            int frameY = (projectile.currentFrame / 4) * 16;
+            Rect srcRect(frameX, frameY, 16, 16);
+            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(128, 0, 255), true);
+        }
+    }
+    
+    for (const auto& projectile : projectiles) {
+        Rect dstRect = projectile.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        
+        int spritesheet = projectile.movingRight ? projectileRightSpritesheet : projectileLeftSpritesheet;
+        
+        if (spritesheet >= 0) {
+            int frameX = (projectile.currentFrame % 4) * 8;
+            int frameY = (projectile.currentFrame / 4) * 8;
+            Rect srcRect(frameX, frameY, 8, 8);
+            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(255, 200, 0), true);
+        }
+    }
+#endif
+    
+    // Draw player sprite
+    Rect dstRect = player.getCollider();
+#ifdef PLATFORM_PICO
+    dstRect.x -= TO_FIXED(camX);
+    dstRect.y -= TO_FIXED(camY);
+#else
+    dstRect.x -= camX;
+    dstRect.y -= camY;
+#endif
+    
+    if (playerSpritesheet >= 0) {
+        int frameX = (player.currentFrame % 4) * 16;
+        int frameY = (player.currentFrame / 4) * 16;
+        Rect srcRect(frameX, frameY, 16, 16);
+        
+        renderer->drawSprite(playerSpritesheet, srcRect, dstRect, !player.facingRight());
+    } else {
+        // Fallback if texture fails to load
+        renderer->drawRect(dstRect, Color(255, 0, 0), true);
+    }
+    
+    // Draw HP counter UI in top-left corner
+    if (energySpritesheet >= 0) {
+        int frameX = (hpUIFrame % 4) * 16;
+        int frameY = (hpUIFrame / 4) * 16;
+        Rect srcRect(static_cast<float>(frameX), static_cast<float>(frameY), 16.0f, 16.0f);
+        Rect dstRect(8.0f, 8.0f, 16.0f, 16.0f);
+        
+        renderer->drawSprite(energySpritesheet, srcRect, dstRect, false);
+    } else {
+        Rect hpIconRect(8.0f, 8.0f, 16.0f, 16.0f);
+        renderer->drawRect(hpIconRect, Color(255, 0, 0), true);
+    }
+    
+#ifdef PLATFORM_PICO
+    char hpText[8];
+    snprintf(hpText, sizeof(hpText), "%dx", player.health);
+    renderer->drawText(hpText, 28, 10, Color(255, 255, 255));
+#else
+    std::string hpText = std::to_string(player.health) + "x";
+    renderer->drawText(hpText.c_str(), 28, 10, Color(255, 255, 255));
+#endif
+    
+    // Draw objective UI if level has objectives
+#ifdef PLATFORM_PICO
+    bool hasObjective = false;
+    size_t objectiveIdx = 0;
+    for (size_t i = 0; i < objectives.size(); i++) {
+        if (objectives.isActive(i)) {
+            hasObjective = true;
+            objectiveIdx = i;
+            break;
+        }
+    }
+    if (hasObjective) {
+        const Objective& objective = objectives[objectiveIdx];
+        int spritesheet = getObjectiveSpritesheet(objective.type);
+#else
+    if (!objectives.empty()) {
+        const Objective& objective = objectives[0];
+        int spritesheet = getObjectiveSpritesheet(objective.type);
+#endif
+        
+        // Draw objective sprite icon
+        Rect iconDst(8, 28, 16, 16);
+        if (spritesheet >= 0) {
+            Rect iconSrc(0, 0, 16, 16);
+            renderer->drawSprite(spritesheet, iconSrc, iconDst, false);
+        } else {
+            renderer->drawRect(iconDst, Color(255, 255, 0), true);
+        }
+        
+        // Draw collection status
+#ifdef PLATFORM_PICO
+        const char* statusText = levelObjectiveCollected ? "1/1" : "0/1";
+#else
+        std::string statusText = levelObjectiveCollected ? "1/1" : "0/1";
+#endif
+    #ifdef PLATFORM_PICO
+        renderer->drawText(statusText, 28, 30, Color(255, 255, 255));
+    #else
+        renderer->drawText(statusText.c_str(), 28, 30, Color(255, 255, 255));
+    #endif
+    }
+    
+    renderer->endFrame();
+}
+
+int Game::getObjectiveSpritesheet(ObjectiveType type) const {
+    switch (type) {
+        case ObjectiveType::CHARGER: return chargerSpritesheet;
+        case ObjectiveType::ENCLOSURE: return enclosureSpritesheet;
+        case ObjectiveType::HAPTIC: return hapticSpritesheet;
+        case ObjectiveType::PARTS: return partsSpritesheet;
+        case ObjectiveType::SCREEN: return screenSpritesheet;
+        case ObjectiveType::PICO: return picoSpritesheet;
+        default: return -1;
+    }
+}

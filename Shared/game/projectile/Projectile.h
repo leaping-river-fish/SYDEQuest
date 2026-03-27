@@ -1,0 +1,37 @@
+#pragma once
+#include "../../core/types.h"
+
+class Projectile {
+public:
+#ifdef PLATFORM_PICO
+    static constexpr fixed_t WIDTH = TO_FIXED(8.0f);
+    static constexpr fixed_t HEIGHT = TO_FIXED(8.0f);
+    static constexpr fixed_t SPEED = TO_FIXED(350.0f);
+    static constexpr fixed_t MAX_LIFETIME = TO_FIXED(2.0f);
+    static constexpr fixed_t FRAME_TIME = TO_FIXED(0.0417f);
+#else
+    static constexpr float WIDTH = 8.0f;
+    static constexpr float HEIGHT = 8.0f;
+    static constexpr float SPEED = 350.0f;
+    static constexpr float MAX_LIFETIME = 2.0f;
+    static constexpr float FRAME_TIME = 0.0417f;
+#endif
+    static constexpr int TOTAL_FRAMES = 12;
+    
+    Vec2 position;
+    Vec2 velocity;
+    float lifetime;
+    bool shouldDestroy;
+    bool movingRight;
+    
+    // Animation state
+    int currentFrame;
+    float animationTimer;
+    
+    Projectile() : position(0.0f, 0.0f), velocity(0.0f, 0.0f), lifetime(0.0f),
+                  shouldDestroy(false), movingRight(false), currentFrame(0), animationTimer(0.0f) {}
+    Projectile(Vec2 startPos, bool movingRight);
+    
+    void update(float deltaTime);
+    Rect getCollider() const;
+};

@@ -1,73 +1,140 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.2.0)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.2.0-a4)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+set(PICO_BOARD pico CACHE STRING "Board type")
+
 cmake_minimum_required(VERSION 3.13)
 
-# Detect platform
-if(DEFINED PICO_SDK_PATH)
-    set(TARGET_PLATFORM "pico")
-    include(pico_sdk_import.cmake)
-else()
-    set(TARGET_PLATFORM "desktop")
+# Detect platform based on Pico SDK presence (set by VSCode extension)
+if(NOT DEFINED TARGET_PLATFORM)
+    if(DEFINED PICO_SDK_PATH)
+        set(TARGET_PLATFORM "pico")
+    else()
+        set(TARGET_PLATFORM "desktop")
+    endif()
 endif()
 
-project(platformer CXX)
+if(TARGET_PLATFORM STREQUAL "pico")
+    include(pico_sdk_import.cmake)
+endif()
+
+project(platformer CXX C ASM)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
+
+# Initialize Pico SDK early (required for VSCode extension)
+if(TARGET_PLATFORM STREQUAL "pico")
+    pico_sdk_init()
+endif()
 
 # ---------------------------
-# Platform-independent game sources
+# Shared sources (platform-independent game logic)
 # ---------------------------
-set(GAME_SOURCES
-    src/game/Game.cpp
-    src/game/player/Player.cpp
-    src/game/player/PlayerController.cpp
-    src/game/projectile/Projectile.cpp
-    src/game/enemy/BasicEnemy.cpp
-    src/game/enemy/RangedEnemy.cpp
-    src/game/enemy/EnemyProjectile.cpp
-    src/game/healthpack/HealthPack.cpp
-    src/game/objective/Objective.cpp
-    src/game/physics/Physics.cpp
-    src/game/physics/Collision.cpp
-    src/game/level/Level.cpp
-    src/game/level/Camera.cpp
+set(SHARED_SOURCES
+    Shared/game/Game.cpp
+    Shared/game/player/Player.cpp
+    Shared/game/player/PlayerController.cpp
+    Shared/game/projectile/Projectile.cpp
+    Shared/game/enemy/BasicEnemy.cpp
+    Shared/game/enemy/RangedEnemy.cpp
+    Shared/game/enemy/EnemyProjectile.cpp
+    Shared/game/healthpack/HealthPack.cpp
+    Shared/game/objective/Objective.cpp
+    Shared/game/physics/Physics.cpp
+    Shared/game/physics/Collision.cpp
+    Shared/game/level/Level.cpp
+    Shared/game/level/Camera.cpp
 )
 
 # ---------------------------
-# Desktop build
+# Desktop sources (SDL2 implementation)
+# ---------------------------
+set(DESKTOP_SOURCES
+    Desktop/main_desktop.cpp
+    Desktop/DesktopRenderer.cpp
+    Desktop/DesktopInput.cpp
+    Desktop/DesktopHaptics.cpp
+    Desktop/DesktopTimer.cpp
+)
+
+# ---------------------------
+# Pico sources (Pico SDK implementation)
+# ---------------------------
+set(PICO_SOURCES
+    Pico/main_pico.cpp
+    Pico/PicoRenderer.cpp
+    Pico/PicoInput.cpp
+    Pico/PicoHaptics.cpp
+    Pico/PicoTimer.cpp
+)
+
+# ---------------------------
+# Build targets
 # ---------------------------
 if(TARGET_PLATFORM STREQUAL "desktop")
+    # Desktop build with SDL2
     find_package(SDL2 REQUIRED)
     find_package(SDL2_image REQUIRED)
     find_package(SDL2_ttf REQUIRED)
     
-    add_executable(platformer
-        ${GAME_SOURCES}
-        src/platform/desktop/main_desktop.cpp
-        src/platform/desktop/DesktopRenderer.cpp
-        src/platform/desktop/DesktopInput.cpp
-        src/platform/desktop/DesktopHaptics.cpp
-        src/platform/desktop/DesktopTimer.cpp
-    )
+    add_executable(platformer ${SHARED_SOURCES} ${DESKTOP_SOURCES})
     
     target_include_directories(platformer PRIVATE 
-        src 
+        Shared 
         ${SDL2_INCLUDE_DIRS}
     )
     
-    target_link_libraries(platformer PRIVATE ${SDL2_LIBRARIES} SDL2_image::SDL2_image SDL2_ttf::SDL2_ttf)
-
-# ---------------------------
-# Pico build (future)
-# ---------------------------
-elseif(TARGET_PLATFORM STREQUAL "pico")
-    pico_sdk_init()
-    
-    add_executable(platformer
-        ${GAME_SOURCES}
-        src/platform/pico/main_pico.cpp
-        # ... other pico sources
+    target_link_libraries(platformer PRIVATE 
+        ${SDL2_LIBRARIES} 
+        SDL2_image::SDL2_image 
+        SDL2_ttf::SDL2_ttf
     )
     
-    target_include_directories(platformer PRIVATE src)
-    target_link_libraries(platformer pico_stdlib)
+elseif(TARGET_PLATFORM STREQUAL "pico")
+    # Pico build (VSCode extension compatible)
+    
+    add_executable(platformer ${SHARED_SOURCES} ${PICO_SOURCES})
+    
+    target_include_directories(platformer PRIVATE 
+        Shared
+    )
+    
+    target_compile_definitions(platformer PRIVATE 
+        PLATFORM_PICO
+        PICO_HEAP_SIZE=0x14000
+    )
+    
+    # Link Pico SDK libraries
+    target_link_libraries(platformer 
+        pico_stdlib
+        hardware_spi
+        hardware_gpio
+        hardware_pwm
+        hardware_dma
+    )
+    
+    # Enable USB serial output (optional, for debugging)
+    pico_enable_stdio_usb(platformer 1)
+    pico_enable_stdio_uart(platformer 0)
+    
+    # Generate UF2 file for drag-and-drop to Pico
     pico_add_extra_outputs(platformer)
+    
+    # Asset generation (optional - can be run manually)
+    # Uncomment when assets need to be embedded
+    # set(ASSET_SCRIPT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tools)
+    # set(ASSET_OUTPUT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Pico/assets)
+    # ... add custom commands here ...
 endif()
 

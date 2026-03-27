@@ -4,3 +4,14 @@ build/
 *.bin
 *.o
 
+build-pc/
+*.uf2
+*.elf
+*.bin
+*.o
+
+# build-pico/
+# *.uf2
+# *.elf
+# *.bin
+# *.o
