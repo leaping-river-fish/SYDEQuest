@@ -72,8 +72,8 @@ void EnemyProjectile::update(float deltaTime) {
     
     // Update animation
     animationTimer += deltaTime;
-    if (animationTimer >= FRAME_TIME) {
-        animationTimer -= FRAME_TIME;
+    if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
+        animationTimer -= ANIM_FRAME_DURATION_SEC;
         currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
     }
 }

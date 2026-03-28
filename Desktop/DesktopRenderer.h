@@ -18,6 +18,8 @@ public:
     
     int loadTexture(const char* path) override;
     void drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) override;
+    void drawSpriteFrame(int textureID, int frameIndex, int frameWidth, int frameHeight,
+                         const Rect& dstRect, bool flipHorizontal) override;
     
     void drawText(const char* text, int x, int y, Color color) override;
     

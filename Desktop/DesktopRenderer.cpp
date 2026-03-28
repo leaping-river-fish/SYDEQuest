@@ -129,6 +129,18 @@ void DesktopRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect&
     SDL_RenderCopyEx(renderer, textures[textureID], &src, &dst, 0.0, nullptr, flip);
 }
 
+void DesktopRenderer::drawSpriteFrame(int textureID, int frameIndex, int frameWidth, int frameHeight,
+                                        const Rect& dstRect, bool flipHorizontal) {
+    int frameX = (frameIndex % 4) * frameWidth;
+    int frameY = (frameIndex / 4) * frameHeight;
+    Rect srcRect(
+        static_cast<float>(frameX),
+        static_cast<float>(frameY),
+        static_cast<float>(frameWidth),
+        static_cast<float>(frameHeight));
+    drawSprite(textureID, srcRect, dstRect, flipHorizontal);
+}
+
 void DesktopRenderer::drawText(const char* text, int x, int y, Color color) {
     if (!font || !text || text[0] == '\0') {
         return;

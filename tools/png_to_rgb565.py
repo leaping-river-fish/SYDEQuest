@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
-"""Convert PNGs to RGB565 C headers: 4x3 sheet (12 frames) or flat full image."""
+"""Convert PNGs to RGB565 C headers: sheet (grid of frames) or flat full image.
+
+Terrain (e.g. FullTerrainSpriteSheet.png, 64x64, 4x4 tiles of 16px): use **sheet** mode with
+four rows and four columns so each 16x16 cell becomes one frame in row-major order::
+
+    python tools/png_to_rgb565.py sheet FullTerrainSpriteSheet.png Pico/assets/terrain_sprite.h terrain_sprite 4 4
+
+That order matches DesktopRenderer (tile id as column/row in a 4x4 texture) and
+PicoRenderer::drawTile, which passes the CSV tile id as a **frame index** into drawFrame
+(linear frame-major ``uint16_t`` data), not runtime sampling of a flat 64x64 bitmap.
+
+Do not use **flat** mode for terrain if the game indexes tiles 0..15 as separate frames;
+flat mode emits one rectangle (frameCount=1) and breaks tile rendering.
+
+Gaps between some terrain columns on device are usually transparent pixels inside specific
+tile IDs in the art (edge/cap tiles), not a stride bug in conversion.
+"""
 import sys
 from pathlib import Path
 from PIL import Image
@@ -121,10 +137,17 @@ def main():
     if mode not in ("sheet", "flat"):
         print("First argument must be 'sheet' or 'flat'")
         sys.exit(1)
-    if len(sys.argv) != 5:
+    if mode == "flat" and len(sys.argv) != 5:
         print(
             "Usage:\n"
-            "  png_to_rgb565.py sheet <input.png> <output.h> <array_name>\n"
+            "  png_to_rgb565.py sheet <input.png> <output.h> <array_name> [cols rows]\n"
+            "  png_to_rgb565.py flat  <input.png> <output.h> <array_name>"
+        )
+        sys.exit(1)
+    if mode == "sheet" and len(sys.argv) not in (5, 7):
+        print(
+            "Usage:\n"
+            "  png_to_rgb565.py sheet <input.png> <output.h> <array_name> [cols rows]\n"
             "  png_to_rgb565.py flat  <input.png> <output.h> <array_name>"
         )
         sys.exit(1)
@@ -134,7 +157,11 @@ def main():
     array_name = sys.argv[4]
 
     if mode == "sheet":
-        spritesheet_to_single_header(png_path, output_path, array_name)
+        cols, rows = COLS, ROWS
+        if len(sys.argv) == 7:
+            cols = int(sys.argv[5])
+            rows = int(sys.argv[6])
+        spritesheet_to_single_header(png_path, output_path, array_name, cols=cols, rows=rows)
     else:
         png_to_rgb565_header_flat(png_path, output_path, array_name)
 

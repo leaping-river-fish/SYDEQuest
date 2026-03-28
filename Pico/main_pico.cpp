@@ -18,11 +18,11 @@ int main() {
     
     Game game(&renderer, &input, &haptics, &timer);
     game.init();
-    
+
     game.getLevel().loadFromBinaryData(level1_tiles, level1_width, level1_height, &level1_metadata);
-    
+    game.syncEntitiesFromCurrentLevel("../levels/Level1.csv");
+
     while (true) {
-        timer.update();
         game.update();
         game.render();
     }

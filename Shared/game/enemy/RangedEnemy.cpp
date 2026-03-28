@@ -63,7 +63,7 @@ void RangedEnemy::update(float deltaTime, const Level& level, const Player& play
         setFacingRight(playerCenter.x > enemyCenter.x);
         
         // Shoot at intervals
-        if (shootTimer >= SHOOT_INTERVAL) {
+        if (shootTimer >= SHOOT_INTERVAL_SEC) {
             // Spawn projectile at enemy center
             Vec2 projectilePos = Vec2(
                 enemyCenter.x - EnemyProjectile::WIDTH / 2,
@@ -113,8 +113,8 @@ void RangedEnemy::update(float deltaTime, const Level& level, const Player& play
     
     // Update animation
     animationTimer += deltaTime;
-    if (animationTimer >= FRAME_TIME) {
-        animationTimer -= FRAME_TIME;
+    if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
+        animationTimer -= ANIM_FRAME_DURATION_SEC;
         currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
     }
     
@@ -122,14 +122,18 @@ void RangedEnemy::update(float deltaTime, const Level& level, const Player& play
     Rect collider = getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     if (velocity.y > 0) {
         for (int x = leftTile; x <= rightTile; x++) {
             if (level.isSolid(x, bottomTile)) {
+#ifdef PLATFORM_PICO
+                position.y = TO_FIXED(bottomTile * tileSize) - collider.height;
+#else
                 position.y = bottomTile * tileSize - collider.height;
+#endif
                 velocity.y = 0;
                 return;
             }
@@ -191,8 +195,8 @@ void RangedEnemy::checkEdgeDetection(const Level& level) {
     float checkY = position.y + HEIGHT + 1;
 #endif
     
-    int tileToDrop = (int)checkX / tileSize;
-    int tileAtFeet = (int)checkY / tileSize;
+    int tileToDrop = worldToTile(checkX, tileSize);
+    int tileAtFeet = worldToTile(checkY, tileSize);
     
     bool hasGroundAhead = level.isSolid(tileToDrop, tileAtFeet) || level.isPlatform(tileToDrop, tileAtFeet);
     
@@ -205,15 +209,19 @@ void RangedEnemy::checkWallCollision(const Level& level) {
     Rect collider = getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int topTile = (int)(collider.y) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int topTile = worldToTile(collider.y, tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     if (velocity.x > 0) {
         for (int y = topTile; y <= bottomTile; y++) {
             if (level.isSolid(rightTile, y)) {
+#ifdef PLATFORM_PICO
+                position.x = TO_FIXED(rightTile * tileSize) - collider.width;
+#else
                 position.x = rightTile * tileSize - collider.width;
+#endif
                 setFacingRight(false);
                 return;
             }
@@ -221,7 +229,11 @@ void RangedEnemy::checkWallCollision(const Level& level) {
     } else if (velocity.x < 0) {
         for (int y = topTile; y <= bottomTile; y++) {
             if (level.isSolid(leftTile, y)) {
+#ifdef PLATFORM_PICO
+                position.x = TO_FIXED((leftTile + 1) * tileSize);
+#else
                 position.x = (leftTile + 1) * tileSize;
+#endif
                 setFacingRight(true);
                 return;
             }
@@ -230,7 +242,11 @@ void RangedEnemy::checkWallCollision(const Level& level) {
 }
 
 void RangedEnemy::applyGravity(float deltaTime) {
+#ifdef PLATFORM_PICO
+    velocity.y += FIXED_MUL(GRAVITY, floatToFixed(deltaTime));
+#else
     velocity.y += GRAVITY * deltaTime;
+#endif
     if (velocity.y > MAX_FALL_SPEED) {
         velocity.y = MAX_FALL_SPEED;
     }
@@ -239,11 +255,12 @@ void RangedEnemy::applyGravity(float deltaTime) {
 bool RangedEnemy::hasLineOfSight(Vec2 targetPos, const Level& level) const {
     Vec2 enemyCenter = Vec2(position.x + WIDTH / 2, position.y + HEIGHT / 2);
     
+    int ts = level.getTileSize();
     // Bresenham's line algorithm to check for solid blocks between enemy and target
-    int x0 = (int)(enemyCenter.x / level.getTileSize());
-    int y0 = (int)(enemyCenter.y / level.getTileSize());
-    int x1 = (int)(targetPos.x / level.getTileSize());
-    int y1 = (int)(targetPos.y / level.getTileSize());
+    int x0 = worldToTile(enemyCenter.x, ts);
+    int y0 = worldToTile(enemyCenter.y, ts);
+    int x1 = worldToTile(targetPos.x, ts);
+    int y1 = worldToTile(targetPos.y, ts);
     
     int dx = abs(x1 - x0);
     int dy = abs(y1 - y0);

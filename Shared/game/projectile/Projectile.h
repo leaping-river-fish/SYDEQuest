@@ -8,14 +8,13 @@ public:
     static constexpr fixed_t HEIGHT = TO_FIXED(8.0f);
     static constexpr fixed_t SPEED = TO_FIXED(350.0f);
     static constexpr fixed_t MAX_LIFETIME = TO_FIXED(2.0f);
-    static constexpr fixed_t FRAME_TIME = TO_FIXED(0.0417f);
 #else
     static constexpr float WIDTH = 8.0f;
     static constexpr float HEIGHT = 8.0f;
     static constexpr float SPEED = 350.0f;
     static constexpr float MAX_LIFETIME = 2.0f;
-    static constexpr float FRAME_TIME = 0.0417f;
 #endif
+    static constexpr float ANIM_FRAME_DURATION_SEC = 0.0417f;
     static constexpr int TOTAL_FRAMES = 12;
     
     Vec2 position;

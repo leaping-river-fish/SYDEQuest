@@ -12,8 +12,8 @@ void HealthPack::update(float deltaTime) {
     }
     
     animationTimer += deltaTime;
-    if (animationTimer >= FRAME_TIME) {
-        animationTimer -= FRAME_TIME;
+    if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
+        animationTimer -= ANIM_FRAME_DURATION_SEC;
         currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
     }
 }
@@ -33,11 +33,7 @@ void HealthPack::render(IRenderer* renderer, int spritesheet, int camX, int camY
 #endif
     
     if (spritesheet >= 0) {
-        int frameX = (currentFrame % 4) * 16;
-        int frameY = (currentFrame / 4) * 16;
-        Rect srcRect(frameX, frameY, 16, 16);
-        
-        renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        renderer->drawSpriteFrame(spritesheet, currentFrame, 16, 16, dstRect, false);
     } else {
         renderer->drawRect(dstRect, Color(0, 255, 0), true);
     }

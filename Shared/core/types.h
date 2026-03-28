@@ -22,6 +22,11 @@
     inline float fixedToFloat(fixed_t f) { return f; }
 #endif
 
+/** Tile index from world position (pixels); works for float and fixed world units. */
+inline int worldToTile(fixed_t world, int tileSize) {
+    return static_cast<int>(world / TO_FIXED(static_cast<float>(tileSize)));
+}
+
 struct Vec2 {
     fixed_t x, y;
 

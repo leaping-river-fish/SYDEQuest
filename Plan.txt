@@ -17,6 +17,8 @@ Make Logo
 
 Add Start Screen
 
-Fix sprite rendering FOR PICO <--------------------- THE ISSUE
+Fix sprite rendering FOR PICO 
 
-Rendering rate SPI Try 40 -> 10-30 MHz decrease MHz
+Terrain LOADS BUT NOT ENEMIES OR player
+
+HEALTH UI IS CUTOFF FIX

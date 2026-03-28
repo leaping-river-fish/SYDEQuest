@@ -26,7 +26,11 @@ void Player::update(float deltaTime) {
     
     // Determine animation state
     bool isMovingHorizontally = (velocity.x != 0);
+#ifdef PLATFORM_PICO
+    bool isJumpingOrFalling = (velocity.y < TO_FIXED(-50.0f) || velocity.y > TO_FIXED(50.0f));
+#else
     bool isJumpingOrFalling = (velocity.y < -50.0f || velocity.y > 50.0f);
+#endif
     
     if (isJumpingOrFalling && isMovingHorizontally) {
         // Jumping/falling while moving - use a mid-action frame
@@ -39,8 +43,8 @@ void Player::update(float deltaTime) {
     } else if (isMovingHorizontally) {
         // Walking - cycle through all frames
         animationTimer += deltaTime;
-        if (animationTimer >= FRAME_TIME) {
-            animationTimer -= FRAME_TIME;
+        if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
+            animationTimer -= ANIM_FRAME_DURATION_SEC;
             currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
         }
     } else {

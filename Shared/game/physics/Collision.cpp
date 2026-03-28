@@ -12,10 +12,10 @@ void Collision::resolveVertical(Player& player, const Level& level) {
     int tileSize = level.getTileSize();
     
     // Get tile range
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int topTile = (int)(collider.y) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int topTile = worldToTile(collider.y, tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     // Check vertical collisions
     if (player.velocity.y > 0) {
@@ -81,10 +81,10 @@ void Collision::resolveHorizontal(Player& player, const Level& level) {
     Rect collider = player.getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int topTile = (int)(collider.y) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int topTile = worldToTile(collider.y, tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     if (player.velocity.x > 0) {
         for (int y = topTile; y <= bottomTile; y++) {
@@ -117,10 +117,10 @@ bool Collision::checkProjectileTileCollision(const Projectile& projectile, const
     Rect collider = projectile.getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int topTile = (int)(collider.y) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int topTile = worldToTile(collider.y, tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     // Check if projectile hits any solid tile
     // Projectiles pass through one-way platforms (they fly horizontally)
@@ -139,10 +139,10 @@ bool Collision::checkEnemyProjectileTileCollision(const EnemyProjectile& project
     Rect collider = projectile.getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int topTile = (int)(collider.y) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int topTile = worldToTile(collider.y, tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     // Check if enemy projectile hits any solid tile
     // Enemy projectiles pass through platforms but collide with solid blocks

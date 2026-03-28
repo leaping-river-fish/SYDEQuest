@@ -20,6 +20,9 @@ public:
     
     virtual int loadTexture(const char* path) = 0;
     virtual void drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) = 0;
+    /** 4x3 frame grid: frame index 0..11 maps to (index%4)*fw, (index/4)*fh. */
+    virtual void drawSpriteFrame(int textureID, int frameIndex, int frameWidth, int frameHeight,
+                                 const Rect& dstRect, bool flipHorizontal) = 0;
     
     virtual void drawText(const char* text, int x, int y, Color color) = 0;
     

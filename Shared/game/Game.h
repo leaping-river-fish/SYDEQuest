@@ -81,7 +81,12 @@ public:
     
     bool loadLevel(const char* levelName);
     Level& getLevel() { return level; }
-    
+
+#ifdef PLATFORM_PICO
+    /** Reposition player and repopulate entity pools from the current Level (after loadFromBinaryData). */
+    void syncEntitiesFromCurrentLevel(const char* levelNameForTracking);
+#endif
+
 private:
     // Platform interfaces
     IRenderer* renderer;
@@ -164,5 +169,9 @@ private:
     
     void checkPortalCollisions();
     int getObjectiveSpritesheet(ObjectiveType type) const;
+
+#ifdef PLATFORM_PICO
+    void resetAndSpawnEntitiesPico();
+#endif
 };
 

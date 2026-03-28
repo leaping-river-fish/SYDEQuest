@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Convert CSV level files to C headers: row-major int8_t tile arrays + LevelMetadata for Pico."""
+"""Convert CSV level files to C headers: row-major int8_t tile arrays + LevelMetadata for Pico.
+
+Regenerate embedded Pico headers after editing a level CSV, then diff to verify no drift::
+
+    python tools/csv_to_binary_header.py levels/Level1.csv Pico/assets/level1_data.h level1
+    python tools/csv_to_binary_header.py levels/Level2.csv Pico/assets/level2_data.h level2
+
+Use ``git diff Pico/assets/level*_data.h`` (or your VCS) to review changes before committing.
+"""
 import sys
 from pathlib import Path
 
@@ -26,7 +34,7 @@ def parse_csv_level(csv_path):
 
 
 def parse_tile_rows(tile_lines):
-    """Parse comma-separated tile rows into lists of int (-1..14)."""
+    """Parse comma-separated tile rows into lists of int (-1..15)."""
     rows = []
     for raw in tile_lines:
         parts = [p.strip() for p in raw.split(",")]

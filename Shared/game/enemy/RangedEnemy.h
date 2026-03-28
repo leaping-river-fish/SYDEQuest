@@ -20,7 +20,6 @@ public:
     static constexpr fixed_t MOVE_SPEED = TO_FIXED(50.0f);
     static constexpr fixed_t GRAVITY = TO_FIXED(980.0f);
     static constexpr fixed_t MAX_FALL_SPEED = TO_FIXED(500.0f);
-    static constexpr fixed_t FRAME_TIME = TO_FIXED(0.0833f);
     static constexpr fixed_t SHOOT_INTERVAL = TO_FIXED(1.0f);
     static constexpr fixed_t DETECTION_RADIUS = TO_FIXED(160.0f);
     static constexpr fixed_t SHOOT_PAUSE_TIME = TO_FIXED(0.3f);
@@ -30,11 +29,13 @@ public:
     static constexpr float MOVE_SPEED = 50.0f;
     static constexpr float GRAVITY = 980.0f;
     static constexpr float MAX_FALL_SPEED = 500.0f;
-    static constexpr float FRAME_TIME = 0.0833f;
     static constexpr float SHOOT_INTERVAL = 1.0f;
     static constexpr float DETECTION_RADIUS = 160.0f;
     static constexpr float SHOOT_PAUSE_TIME = 0.3f;
 #endif
+    static constexpr float ANIM_FRAME_DURATION_SEC = 0.0833f;
+    static constexpr float SHOOT_INTERVAL_SEC = 1.0f;
+    static constexpr float SHOOT_PAUSE_SEC = 0.3f;
     static constexpr int TOTAL_FRAMES = 12;
     
     Vec2 position;

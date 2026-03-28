@@ -103,6 +103,7 @@ if(TARGET_PLATFORM STREQUAL "desktop")
     
 elseif(TARGET_PLATFORM STREQUAL "pico")
     # Pico build (VSCode extension compatible)
+    add_subdirectory(third_party/ST7789_Pico)
     
     add_executable(platformer ${SHARED_SOURCES} ${PICO_SOURCES})
     
@@ -115,13 +116,14 @@ elseif(TARGET_PLATFORM STREQUAL "pico")
         PICO_HEAP_SIZE=0x14000
     )
     
-    # Link Pico SDK libraries
+    # Link Pico SDK libraries + ST7789 display driver (st7789_lib pulls hardware_irq for DMA)
     target_link_libraries(platformer 
         pico_stdlib
         hardware_spi
         hardware_gpio
         hardware_pwm
         hardware_dma
+        st7789_lib
     )
     
     # Enable USB serial output (optional, for debugging)

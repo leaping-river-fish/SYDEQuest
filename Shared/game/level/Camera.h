@@ -11,8 +11,9 @@ public:
     void follow(const Player& player, const Level& level);
     
 #ifdef PLATFORM_PICO
-    int getOffsetX() const { return FROM_FIXED(position.x); }
-    int getOffsetY() const { return FROM_FIXED(position.y); }
+    /** Same as PicoRenderer fixedToPixelInt: floor division in fixed space (matches drawSpriteFrame / drawTile). */
+    int getOffsetX() const { return static_cast<int>(static_cast<int32_t>(position.x) >> FIXED_SHIFT); }
+    int getOffsetY() const { return static_cast<int>(static_cast<int32_t>(position.y) >> FIXED_SHIFT); }
 #else
     int getOffsetX() const { return static_cast<int>(position.x); }
     int getOffsetY() const { return static_cast<int>(position.y); }

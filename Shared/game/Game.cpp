@@ -55,8 +55,12 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
 }
 
 void Game::init() {
+#ifndef PLATFORM_PICO
     loadLevel("../levels/Level1.csv");
-    
+#endif
+    // Pico: level tiles + metadata come from embedded header; main_pico calls
+    // loadFromBinaryData then syncEntitiesFromCurrentLevel() after textures load.
+
     playerSpritesheet = renderer->loadTexture("../assets/AlternatingWalk.png");
     projectileLeftSpritesheet = renderer->loadTexture("../assets/PencilSpinLeft.png");
     projectileRightSpritesheet = renderer->loadTexture("../assets/PencilSpinRight.png");
@@ -76,26 +80,19 @@ void Game::init() {
     picoSpritesheet = renderer->loadTexture("../assets/PicoSprite.png");
 }
 
-bool Game::loadLevel(const char* levelName) {
-    if (!level.loadFromFile(levelName)) {
-        return false;
-    }
-    
-    strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
-    currentLevelName[sizeof(currentLevelName) - 1] = '\0';
-    
+#ifdef PLATFORM_PICO
+void Game::resetAndSpawnEntitiesPico() {
     player.position = level.getSpawnPoint();
     player.velocity = Vec2(0.0f, 0.0f);
     player.setGrounded(false);
-    
-#ifdef PLATFORM_PICO
+
     projectiles.clear();
     basicEnemies.clear();
     rangedEnemies.clear();
     enemyProjectiles.clear();
     healthPacks.clear();
     objectives.clear();
-    
+
     for (size_t i = 0; i < 25; i++) {
         basicEnemyStates[i].isActive = false;
         basicEnemyStates[i].wasRendered = false;
@@ -112,17 +109,7 @@ bool Game::loadLevel(const char* levelName) {
         objectiveStates[i].isActive = false;
         objectiveStates[i].wasRendered = false;
     }
-#else
-    projectiles.clear();
-    basicEnemies.clear();
-    rangedEnemies.clear();
-    enemyProjectiles.clear();
-    healthPacks.clear();
-    objectives.clear();
-#endif
-    
-    // Spawn basic enemies from level data
-#ifdef PLATFORM_PICO
+
     const Vec2* basicEnemySpawnPoints = level.getBasicEnemySpawns();
     uint8_t basicEnemyCount = level.getBasicEnemySpawnCount();
     for (uint8_t i = 0; i < basicEnemyCount; i++) {
@@ -131,7 +118,7 @@ bool Game::loadLevel(const char* levelName) {
             *enemy = BasicEnemy(basicEnemySpawnPoints[i], true);
         }
     }
-    
+
     const Vec2* rangedEnemySpawnPoints = level.getRangedEnemySpawns();
     uint8_t rangedEnemyCount = level.getRangedEnemySpawnCount();
     for (uint8_t i = 0; i < rangedEnemyCount; i++) {
@@ -140,7 +127,7 @@ bool Game::loadLevel(const char* levelName) {
             *enemy = RangedEnemy(rangedEnemySpawnPoints[i], true);
         }
     }
-    
+
     const Vec2* healthPackSpawnPoints = level.getHealthPackSpawns();
     uint8_t healthPackCount = level.getHealthPackSpawnCount();
     for (uint8_t i = 0; i < healthPackCount; i++) {
@@ -149,7 +136,7 @@ bool Game::loadLevel(const char* levelName) {
             *pack = HealthPack(healthPackSpawnPoints[i]);
         }
     }
-    
+
     levelObjectiveCollected = false;
     const Vec2* objectiveSpawnPoints = level.getObjectiveSpawns();
     const ObjectiveType* objectiveTypes = level.getObjectiveTypes();
@@ -160,7 +147,44 @@ bool Game::loadLevel(const char* levelName) {
             *obj = Objective(objectiveSpawnPoints[i], objectiveTypes[i]);
         }
     }
+
+    camera.follow(player, level);
+}
+
+void Game::syncEntitiesFromCurrentLevel(const char* levelNameForTracking) {
+    if (levelNameForTracking) {
+        strncpy(currentLevelName, levelNameForTracking, sizeof(currentLevelName) - 1);
+        currentLevelName[sizeof(currentLevelName) - 1] = '\0';
+    }
+    resetAndSpawnEntitiesPico();
+}
+#endif
+
+bool Game::loadLevel(const char* levelName) {
+    if (!level.loadFromFile(levelName)) {
+        return false;
+    }
+    
+    strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
+    currentLevelName[sizeof(currentLevelName) - 1] = '\0';
+    
+#ifdef PLATFORM_PICO
+    resetAndSpawnEntitiesPico();
 #else
+    player.position = level.getSpawnPoint();
+    player.velocity = Vec2(0.0f, 0.0f);
+    player.setGrounded(false);
+    
+    projectiles.clear();
+    basicEnemies.clear();
+    rangedEnemies.clear();
+    enemyProjectiles.clear();
+    healthPacks.clear();
+    objectives.clear();
+#endif
+    
+    // Spawn basic enemies from level data
+#ifndef PLATFORM_PICO
     const std::vector<Vec2>& basicEnemySpawnPoints = level.getBasicEnemySpawns();
     for (const Vec2& spawnPos : basicEnemySpawnPoints) {
         basicEnemies.push_back(BasicEnemy(spawnPos, true));
@@ -182,9 +206,11 @@ bool Game::loadLevel(const char* levelName) {
         objectives.push_back(Objective(spawnPos, type));
     }
 #endif
-    
+
+#ifndef PLATFORM_PICO
     camera.follow(player, level);
-    
+#endif
+
     return true;
 }
 
@@ -282,9 +308,8 @@ void Game::update() {
     }
 #endif
     
-    // Update all basic enemies (with culling on Pico)
+    // Update basic + ranged enemies (Pico: distance culling matches desktop DEACTIVATION_DISTANCE)
 #ifdef PLATFORM_PICO
-    fixed_t activationDistSq = FIXED_MUL(ACTIVATION_DISTANCE, ACTIVATION_DISTANCE);
     fixed_t deactivationDistSq = FIXED_MUL(DEACTIVATION_DISTANCE, DEACTIVATION_DISTANCE);
     
     for (size_t i = 0; i < basicEnemies.count; i++) {
@@ -292,14 +317,22 @@ void Game::update() {
         
         fixed_t distSq = distanceSquared(player.position, basicEnemies[i].position);
         
-        if (distSq < activationDistSq) {
-            basicEnemyStates[i].isActive = true;
-        } else if (distSq > deactivationDistSq) {
-            basicEnemyStates[i].isActive = false;
-        }
+        basicEnemyStates[i].isActive = distSq < deactivationDistSq;
         
         if (basicEnemyStates[i].isActive) {
             basicEnemies[i].update(dt, level);
+        }
+    }
+    
+    for (size_t i = 0; i < rangedEnemies.count; i++) {
+        if (!rangedEnemies.isActive(i)) continue;
+        
+        fixed_t distSq = distanceSquared(player.position, rangedEnemies[i].position);
+        
+        rangedEnemyStates[i].isActive = distSq < deactivationDistSq;
+        
+        if (rangedEnemyStates[i].isActive) {
+            rangedEnemies[i].update(dt, level, player, enemyProjectiles);
         }
     }
 #else
@@ -309,26 +342,6 @@ void Game::update() {
             enemy.update(dt, level);
         }
     }
-#endif
-    
-    // Update all ranged enemies (with culling on Pico)
-#ifdef PLATFORM_PICO
-    for (size_t i = 0; i < rangedEnemies.count; i++) {
-        if (!rangedEnemies.isActive(i)) continue;
-        
-        fixed_t distSq = distanceSquared(player.position, rangedEnemies[i].position);
-        
-        if (distSq < activationDistSq) {
-            rangedEnemyStates[i].isActive = true;
-        } else if (distSq > deactivationDistSq) {
-            rangedEnemyStates[i].isActive = false;
-        }
-        
-        if (rangedEnemyStates[i].isActive) {
-            rangedEnemies[i].update(dt, level, player, enemyProjectiles);
-        }
-    }
-#else
     for (auto& enemy : rangedEnemies) {
         float distSq = distanceSquared(player.position, enemy.position);
         if (distSq < DEACTIVATION_DISTANCE * DEACTIVATION_DISTANCE) {
@@ -673,7 +686,7 @@ void Game::render() {
             }
         }
     }
-    
+
     // Draw portals with animation
 #ifdef PLATFORM_PICO
     const Portal* portals = level.getPortals();
@@ -684,10 +697,7 @@ void Game::render() {
         dstRect.y -= TO_FIXED(camY);
         
         if (portalSpritesheet >= 0) {
-            int frameX = (portalFrame % 4) * 32;
-            int frameY = (portalFrame / 4) * 32;
-            Rect srcRect(frameX, frameY, 32, 32);
-            renderer->drawSprite(portalSpritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(portalSpritesheet, portalFrame, 32, 32, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(0, 255, 255), true);
         }
@@ -700,10 +710,7 @@ void Game::render() {
         dstRect.y -= camY;
         
         if (portalSpritesheet >= 0) {
-            int frameX = (portalFrame % 4) * 32;
-            int frameY = (portalFrame / 4) * 32;
-            Rect srcRect(frameX, frameY, 32, 32);
-            renderer->drawSprite(portalSpritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(portalSpritesheet, portalFrame, 32, 32, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(0, 255, 255), true);
         }
@@ -720,10 +727,7 @@ void Game::render() {
         dstRect.y -= TO_FIXED(camY);
         
         if (basicEnemySpritesheet >= 0) {
-            int frameX = (basicEnemies[i].currentFrame % 4) * 16;
-            int frameY = (basicEnemies[i].currentFrame / 4) * 16;
-            Rect srcRect(frameX, frameY, 16, 16);
-            renderer->drawSprite(basicEnemySpritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(basicEnemySpritesheet, basicEnemies[i].currentFrame, 16, 16, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(255, 0, 0), true);
         }
@@ -737,10 +741,7 @@ void Game::render() {
         dstRect.y -= TO_FIXED(camY);
         
         if (rangedEnemySpritesheet >= 0) {
-            int frameX = (rangedEnemies[i].currentFrame % 4) * 16;
-            int frameY = (rangedEnemies[i].currentFrame / 4) * 16;
-            Rect srcRect(frameX, frameY, 16, 16);
-            renderer->drawSprite(rangedEnemySpritesheet, srcRect, dstRect, rangedEnemies[i].facingRight());
+            renderer->drawSpriteFrame(rangedEnemySpritesheet, rangedEnemies[i].currentFrame, 16, 16, dstRect, rangedEnemies[i].facingRight());
         } else {
             renderer->drawRect(dstRect, Color(255, 128, 0), true);
         }
@@ -752,10 +753,7 @@ void Game::render() {
         dstRect.y -= camY;
         
         if (basicEnemySpritesheet >= 0) {
-            int frameX = (enemy.currentFrame % 4) * 16;
-            int frameY = (enemy.currentFrame / 4) * 16;
-            Rect srcRect(frameX, frameY, 16, 16);
-            renderer->drawSprite(basicEnemySpritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(basicEnemySpritesheet, enemy.currentFrame, 16, 16, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(255, 0, 0), true);
         }
@@ -767,10 +765,7 @@ void Game::render() {
         dstRect.y -= camY;
         
         if (rangedEnemySpritesheet >= 0) {
-            int frameX = (enemy.currentFrame % 4) * 16;
-            int frameY = (enemy.currentFrame / 4) * 16;
-            Rect srcRect(frameX, frameY, 16, 16);
-            renderer->drawSprite(rangedEnemySpritesheet, srcRect, dstRect, enemy.facingRight());
+            renderer->drawSpriteFrame(rangedEnemySpritesheet, enemy.currentFrame, 16, 16, dstRect, enemy.facingRight());
         } else {
             renderer->drawRect(dstRect, Color(255, 128, 0), true);
         }
@@ -820,10 +815,7 @@ void Game::render() {
         int spritesheet = enemyProjectiles[i].movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
         
         if (spritesheet >= 0) {
-            int frameX = (enemyProjectiles[i].currentFrame % 4) * 16;
-            int frameY = (enemyProjectiles[i].currentFrame / 4) * 16;
-            Rect srcRect(frameX, frameY, 16, 16);
-            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(spritesheet, enemyProjectiles[i].currentFrame, 16, 16, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(128, 0, 255), true);
         }
@@ -839,10 +831,7 @@ void Game::render() {
         int spritesheet = projectiles[i].movingRight ? projectileRightSpritesheet : projectileLeftSpritesheet;
         
         if (spritesheet >= 0) {
-            int frameX = (projectiles[i].currentFrame % 4) * 8;
-            int frameY = (projectiles[i].currentFrame / 4) * 8;
-            Rect srcRect(frameX, frameY, 8, 8);
-            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(spritesheet, projectiles[i].currentFrame, 8, 8, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(255, 200, 0), true);
         }
@@ -856,10 +845,7 @@ void Game::render() {
         int spritesheet = projectile.movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
         
         if (spritesheet >= 0) {
-            int frameX = (projectile.currentFrame % 4) * 16;
-            int frameY = (projectile.currentFrame / 4) * 16;
-            Rect srcRect(frameX, frameY, 16, 16);
-            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(spritesheet, projectile.currentFrame, 16, 16, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(128, 0, 255), true);
         }
@@ -873,10 +859,7 @@ void Game::render() {
         int spritesheet = projectile.movingRight ? projectileRightSpritesheet : projectileLeftSpritesheet;
         
         if (spritesheet >= 0) {
-            int frameX = (projectile.currentFrame % 4) * 8;
-            int frameY = (projectile.currentFrame / 4) * 8;
-            Rect srcRect(frameX, frameY, 8, 8);
-            renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+            renderer->drawSpriteFrame(spritesheet, projectile.currentFrame, 8, 8, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(255, 200, 0), true);
         }
@@ -894,11 +877,7 @@ void Game::render() {
 #endif
     
     if (playerSpritesheet >= 0) {
-        int frameX = (player.currentFrame % 4) * 16;
-        int frameY = (player.currentFrame / 4) * 16;
-        Rect srcRect(frameX, frameY, 16, 16);
-        
-        renderer->drawSprite(playerSpritesheet, srcRect, dstRect, !player.facingRight());
+        renderer->drawSpriteFrame(playerSpritesheet, player.currentFrame, 16, 16, dstRect, !player.facingRight());
     } else {
         // Fallback if texture fails to load
         renderer->drawRect(dstRect, Color(255, 0, 0), true);
@@ -906,21 +885,17 @@ void Game::render() {
     
     // Draw HP counter UI in top-left corner
     if (energySpritesheet >= 0) {
-        int frameX = (hpUIFrame % 4) * 16;
-        int frameY = (hpUIFrame / 4) * 16;
-        Rect srcRect(static_cast<float>(frameX), static_cast<float>(frameY), 16.0f, 16.0f);
-        Rect dstRect(8.0f, 8.0f, 16.0f, 16.0f);
-        
-        renderer->drawSprite(energySpritesheet, srcRect, dstRect, false);
+        Rect hpIconDst(9.0f, 9.0f, 16.0f, 16.0f);
+        renderer->drawSpriteFrame(energySpritesheet, hpUIFrame, 16, 16, hpIconDst, false);
     } else {
-        Rect hpIconRect(8.0f, 8.0f, 16.0f, 16.0f);
+        Rect hpIconRect(9.0f, 9.0f, 16.0f, 16.0f);
         renderer->drawRect(hpIconRect, Color(255, 0, 0), true);
     }
     
 #ifdef PLATFORM_PICO
     char hpText[8];
     snprintf(hpText, sizeof(hpText), "%dx", player.health);
-    renderer->drawText(hpText, 28, 10, Color(255, 255, 255));
+    renderer->drawText(hpText, 28, 9, Color(255, 255, 255));
 #else
     std::string hpText = std::to_string(player.health) + "x";
     renderer->drawText(hpText.c_str(), 28, 10, Color(255, 255, 255));
@@ -949,8 +924,7 @@ void Game::render() {
         // Draw objective sprite icon
         Rect iconDst(8, 28, 16, 16);
         if (spritesheet >= 0) {
-            Rect iconSrc(0, 0, 16, 16);
-            renderer->drawSprite(spritesheet, iconSrc, iconDst, false);
+            renderer->drawSpriteFrame(spritesheet, 0, 16, 16, iconDst, false);
         } else {
             renderer->drawRect(iconDst, Color(255, 255, 0), true);
         }
@@ -962,7 +936,7 @@ void Game::render() {
         std::string statusText = levelObjectiveCollected ? "1/1" : "0/1";
 #endif
     #ifdef PLATFORM_PICO
-        renderer->drawText(statusText, 28, 30, Color(255, 255, 255));
+        renderer->drawText(statusText, 28, 28, Color(255, 255, 255));
     #else
         renderer->drawText(statusText.c_str(), 28, 30, Color(255, 255, 255));
     #endif

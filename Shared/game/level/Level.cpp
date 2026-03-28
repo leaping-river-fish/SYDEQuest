@@ -64,7 +64,9 @@ int8_t Level::getTileId(int tileX, int tileY) const {
 
 bool Level::isSolid(int tileX, int tileY) const {
     int8_t tileId = getTileId(tileX, tileY);
-    return tileId >= 0 && tileId <= 11;  // Tile IDs 0-11 are solid blocks
+    // 0–11: standard blocks; 15: terrain/decoration (e.g. bridge caps) — collides like a block
+    if (tileId < 0) return false;
+    return tileId <= 11 || tileId == 15;
 }
 
 bool Level::isPlatform(int tileX, int tileY) const {

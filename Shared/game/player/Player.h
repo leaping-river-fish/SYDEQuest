@@ -8,16 +8,15 @@ public:
     static constexpr fixed_t HEIGHT = TO_FIXED(16.0f);
     static constexpr fixed_t MOVE_SPEED = TO_FIXED(150.0f);
     static constexpr fixed_t JUMP_VELOCITY = TO_FIXED(-450.0f);
-    static constexpr fixed_t FRAME_TIME = TO_FIXED(0.0556f);
     static constexpr fixed_t INVINCIBILITY_DURATION = TO_FIXED(1.0f);
 #else
     static constexpr float WIDTH = 16.0f;
     static constexpr float HEIGHT = 16.0f;
     static constexpr float MOVE_SPEED = 150.0f;
     static constexpr float JUMP_VELOCITY = -450.0f;
-    static constexpr float FRAME_TIME = 0.0556f;
     static constexpr float INVINCIBILITY_DURATION = 1.0f;
 #endif
+    static constexpr float ANIM_FRAME_DURATION_SEC = 0.0556f;
     static constexpr int TOTAL_FRAMES = 12;
     
     Vec2 position;

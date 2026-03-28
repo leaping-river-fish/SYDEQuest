@@ -8,12 +8,11 @@ public:
 #ifdef PLATFORM_PICO
     static constexpr fixed_t WIDTH = TO_FIXED(16.0f);
     static constexpr fixed_t HEIGHT = TO_FIXED(16.0f);
-    static constexpr fixed_t FRAME_TIME = TO_FIXED(0.1667f);
 #else
     static constexpr float WIDTH = 16.0f;
     static constexpr float HEIGHT = 16.0f;
-    static constexpr float FRAME_TIME = 0.1667f;
 #endif
+    static constexpr float ANIM_FRAME_DURATION_SEC = 0.1667f;
     static constexpr int TOTAL_FRAMES = 12;
     
     Vec2 position;

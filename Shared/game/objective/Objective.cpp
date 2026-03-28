@@ -20,8 +20,7 @@ void Objective::render(IRenderer* renderer, int spritesheet, int camX, int camY)
 #endif
     
     if (spritesheet >= 0) {
-        Rect srcRect(0.0f, 0.0f, 16.0f, 16.0f);
-        renderer->drawSprite(spritesheet, srcRect, dstRect, false);
+        renderer->drawSpriteFrame(spritesheet, 0, 16, 16, dstRect, false);
     } else {
         renderer->drawRect(dstRect, Color(255, 255, 0), true);
     }

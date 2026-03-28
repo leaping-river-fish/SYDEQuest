@@ -2,6 +2,13 @@
 #include "../level/Level.h"
 #include <cmath>
 
+#ifndef PICO_DEBUG_ENEMY
+#define PICO_DEBUG_ENEMY 0
+#endif
+#if PICO_DEBUG_ENEMY
+#include <cstdio>
+#endif
+
 BasicEnemy::BasicEnemy(Vec2 startPos, bool startMovingRight)
     : position(startPos)
 #ifdef PLATFORM_PICO
@@ -37,22 +44,26 @@ void BasicEnemy::update(float deltaTime, const Level& level) {
     
     // Update animation
     animationTimer += deltaTime;
-    if (animationTimer >= FRAME_TIME) {
-        animationTimer -= FRAME_TIME;
+    if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
+        animationTimer -= ANIM_FRAME_DURATION_SEC;
         currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
     }
     
     Rect collider = getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     if (velocity.y > 0) {
         for (int x = leftTile; x <= rightTile; x++) {
             if (level.isSolid(x, bottomTile)) {
+#ifdef PLATFORM_PICO
+                position.y = TO_FIXED(bottomTile * tileSize) - collider.height;
+#else
                 position.y = bottomTile * tileSize - collider.height;
+#endif
                 velocity.y = 0;
                 return;
             }
@@ -80,6 +91,21 @@ void BasicEnemy::update(float deltaTime, const Level& level) {
             }
         }
     }
+
+#if PICO_DEBUG_ENEMY && defined(PLATFORM_PICO)
+    {
+        static int s_dbgFrame;
+        s_dbgFrame++;
+        if ((s_dbgFrame % 45) == 0) {
+            int ts = level.getTileSize();
+            int tx = worldToTile(position.x + FIXED_DIV(WIDTH, TO_FIXED(2.0f)), ts);
+            int ty = worldToTile(position.y + HEIGHT - TO_FIXED(1.0f), ts);
+            printf("enemy trace: pos=(%.2f,%.2f) tile=(%d,%d) id=%d vx=%.2f vy=%.2f\n",
+                   fixedToFloat(position.x), fixedToFloat(position.y), tx, ty,
+                   level.getTileId(tx, ty), fixedToFloat(velocity.x), fixedToFloat(velocity.y));
+        }
+    }
+#endif
 }
 
 bool BasicEnemy::takeDamage(int amount) {
@@ -114,12 +140,18 @@ void BasicEnemy::checkEdgeDetection(const Level& level) {
     float checkY = position.y + HEIGHT + 1;
 #endif
     
-    int tileToDrop = (int)checkX / tileSize;
-    int tileAtFeet = (int)checkY / tileSize;
+    int tileToDrop = worldToTile(checkX, tileSize);
+    int tileAtFeet = worldToTile(checkY, tileSize);
     
     bool hasGroundAhead = level.isSolid(tileToDrop, tileAtFeet) || level.isPlatform(tileToDrop, tileAtFeet);
     
     if (!hasGroundAhead) {
+#if PICO_DEBUG_ENEMY && defined(PLATFORM_PICO)
+        printf("enemy edge flip: aheadTile=(%d,%d) id=%d solid=%d plat=%d checkX=%.2f\n",
+               tileToDrop, tileAtFeet, level.getTileId(tileToDrop, tileAtFeet),
+               level.isSolid(tileToDrop, tileAtFeet) ? 1 : 0,
+               level.isPlatform(tileToDrop, tileAtFeet) ? 1 : 0, fixedToFloat(checkX));
+#endif
         setMovingRight(!movingRight());
         velocity.x = -velocity.x;
     }
@@ -129,15 +161,24 @@ void BasicEnemy::checkWallCollision(const Level& level) {
     Rect collider = getCollider();
     int tileSize = level.getTileSize();
     
-    int leftTile = (int)(collider.x) / tileSize;
-    int rightTile = (int)(collider.x + collider.width - 1) / tileSize;
-    int topTile = (int)(collider.y) / tileSize;
-    int bottomTile = (int)(collider.y + collider.height - 1) / tileSize;
+    int leftTile = worldToTile(collider.x, tileSize);
+    int rightTile = worldToTile(collider.x + collider.width - TO_FIXED(1.0f), tileSize);
+    int topTile = worldToTile(collider.y, tileSize);
+    int bottomTile = worldToTile(collider.y + collider.height - TO_FIXED(1.0f), tileSize);
     
     if (velocity.x > 0) {
         for (int y = topTile; y <= bottomTile; y++) {
             if (level.isSolid(rightTile, y)) {
+#if PICO_DEBUG_ENEMY && defined(PLATFORM_PICO)
+                printf("enemy wall R: rightTile=%d y=%d tileId=%d posX=%.2f snap->%.2f\n",
+                       rightTile, y, level.getTileId(rightTile, y), fixedToFloat(position.x),
+                       fixedToFloat(TO_FIXED(static_cast<float>(rightTile * tileSize)) - collider.width));
+#endif
+#ifdef PLATFORM_PICO
+                position.x = TO_FIXED(rightTile * tileSize) - collider.width;
+#else
                 position.x = rightTile * tileSize - collider.width;
+#endif
                 setMovingRight(false);
                 velocity.x = -MOVE_SPEED;
                 return;
@@ -146,7 +187,16 @@ void BasicEnemy::checkWallCollision(const Level& level) {
     } else if (velocity.x < 0) {
         for (int y = topTile; y <= bottomTile; y++) {
             if (level.isSolid(leftTile, y)) {
+#if PICO_DEBUG_ENEMY && defined(PLATFORM_PICO)
+                printf("enemy wall L: leftTile=%d y=%d tileId=%d posX=%.2f snap->%.2f\n",
+                       leftTile, y, level.getTileId(leftTile, y), fixedToFloat(position.x),
+                       fixedToFloat(TO_FIXED(static_cast<float>((leftTile + 1) * tileSize))));
+#endif
+#ifdef PLATFORM_PICO
+                position.x = TO_FIXED((leftTile + 1) * tileSize);
+#else
                 position.x = (leftTile + 1) * tileSize;
+#endif
                 setMovingRight(true);
                 velocity.x = MOVE_SPEED;
                 return;
@@ -156,7 +206,11 @@ void BasicEnemy::checkWallCollision(const Level& level) {
 }
 
 void BasicEnemy::applyGravity(float deltaTime) {
+#ifdef PLATFORM_PICO
+    velocity.y += FIXED_MUL(GRAVITY, floatToFixed(deltaTime));
+#else
     velocity.y += GRAVITY * deltaTime;
+#endif
     if (velocity.y > MAX_FALL_SPEED) {
         velocity.y = MAX_FALL_SPEED;
     }
