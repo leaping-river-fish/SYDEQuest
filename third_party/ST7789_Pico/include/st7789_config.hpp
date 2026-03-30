@@ -67,6 +67,9 @@ struct Config {
      */
     uint16_t ram_col_max;
     uint16_t ram_row_max;
+
+    /** If true, OR MADCTL bit 3 (BGR); many ST7789 modules need this for correct RGB565 hues. */
+    bool rgb_order_bgr;
     
     // DMA configuration
     DmaConfig dma;
@@ -88,6 +91,7 @@ struct Config {
         row_offset(0),
         ram_col_max(0),
         ram_row_max(0),
+        rgb_order_bgr(false),
         dma() {}
 };
 

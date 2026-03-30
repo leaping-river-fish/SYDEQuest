@@ -444,12 +444,14 @@ void Game::update() {
     }
 #endif
     
-    // Update HP UI animation
+    // Update HP UI animation (desktop only; Pico uses a static frame in render)
+#ifndef PLATFORM_PICO
     hpUIAnimTimer += dt;
     if (hpUIAnimTimer >= 0.1667f) {  // 6 FPS
         hpUIAnimTimer -= 0.1667f;
         hpUIFrame = (hpUIFrame + 1) % 12;
     }
+#endif
     
     // Update portal animation
     portalAnimTimer += dt;
@@ -883,10 +885,18 @@ void Game::render() {
         renderer->drawRect(dstRect, Color(255, 0, 0), true);
     }
     
-    // Draw HP counter UI in top-left corner
+    // Draw HP counter UI in top-left corner (Pico: static icon frame; redraw every frame after world
+    // because beginFrame clears the full screen and tiles can overlap the HUD area.)
+#ifdef PLATFORM_PICO
+    constexpr int kHpUiFramePico = 0;
+#endif
     if (energySpritesheet >= 0) {
         Rect hpIconDst(9.0f, 9.0f, 16.0f, 16.0f);
+#ifdef PLATFORM_PICO
+        renderer->drawSpriteFrame(energySpritesheet, kHpUiFramePico, 16, 16, hpIconDst, false);
+#else
         renderer->drawSpriteFrame(energySpritesheet, hpUIFrame, 16, 16, hpIconDst, false);
+#endif
     } else {
         Rect hpIconRect(9.0f, 9.0f, 16.0f, 16.0f);
         renderer->drawRect(hpIconRect, Color(255, 0, 0), true);
@@ -901,7 +911,7 @@ void Game::render() {
     renderer->drawText(hpText.c_str(), 28, 10, Color(255, 255, 255));
 #endif
     
-    // Draw objective UI if level has objectives
+    // Draw objective UI if level has objectives (Pico: redraw each frame; same full-clear + overlap as HP HUD.)
 #ifdef PLATFORM_PICO
     bool hasObjective = false;
     size_t objectiveIdx = 0;

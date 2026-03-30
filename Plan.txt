@@ -1,8 +1,6 @@
 add bosses and levels
 
-Implement objectives: Collect parts
-
-BOSSES:
+BOSSES (PLEASE LET THESE BE EASY TO IMPLEMENT):
 
 ROBERT HUNTER - LASER BEAMS/OPTICS (WALL BOUNCING LASERS?) Electromagnetic wave shield?
 
@@ -17,8 +15,15 @@ Make Logo
 
 Add Start Screen
 
-Fix sprite rendering FOR PICO 
+AFTER HARDWARE:
 
-Terrain LOADS BUT NOT ENEMIES OR player
+Fix enemy AI
 
-HEALTH UI IS CUTOFF FIX
+7 LEVELS total
+
+BOSS LEVELS: 3, 5, 7
+
+LEVELS WITH OBJECTIVES: 2, 3, 4, 5, 6, 7
+
+
+

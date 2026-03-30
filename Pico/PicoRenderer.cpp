@@ -27,9 +27,6 @@
 /** Virtual multi-frame spritesheet: 4 frames per row (matches png_to_rgb565.py sheet export). */
 static constexpr int kSpriteSheetCols = 4;
 
-#define SCREEN_WIDTH 320
-#define SCREEN_HEIGHT 240
-
 // Array size must match frameCount * frameW * frameH (linear frame layout).
 static_assert(sizeof(player_sprite) / sizeof(player_sprite[0]) ==
               static_cast<size_t>(PLAYER_SPRITE_FRAME_COUNT) * PLAYER_SPRITE_FRAME_WIDTH * PLAYER_SPRITE_FRAME_HEIGHT);
@@ -70,7 +67,7 @@ static_assert(sizeof(objective_screen_sprite) / sizeof(objective_screen_sprite[0
 static_assert(sizeof(objective_pico_sprite) / sizeof(objective_pico_sprite[0]) ==
               static_cast<size_t>(OBJECTIVE_PICO_SPRITE_WIDTH) * OBJECTIVE_PICO_SPRITE_HEIGHT);
 
-PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13) {
+PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) {
     // Physical panel is 240x320 portrait; landscape (320x240) is applied after begin() via setRotation
     // (ST7789_Pico README: do not put 320x240 in Config to fake landscape).
     static constexpr st7789::Rotation kLandscape = st7789::ROTATION_90;
@@ -95,10 +92,17 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13) {
     // DMA off: enabled path caused corruption; HAL uses blocking SPI (same drawImageDMA/fillRectDMA APIs).
     cfg.dma.enabled = false;
     cfg.dma.buffer_size = 4096;
+    cfg.rgb_order_bgr = BoardConfig::kSt7789RgbOrderBgr;
 
     (void)display.begin(cfg);
     display.setRotation(kLandscape);
     assert(display.hal().getConfig().width == 320u && display.hal().getConfig().height == 240u);
+
+    framebuffer = new uint16_t[SCREEN_WIDTH * SCREEN_HEIGHT];
+    const uint16_t sky = rgb888_to_rgb565(135, 206, 235);
+    for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+        framebuffer[i] = sky;
+    }
 
     pwm_config pwm_cfg = pwm_get_default_config();
     pwm_set_wrap(pwm_gpio_to_slice_num(bl_pin), 65535);
@@ -126,7 +130,10 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13) {
     registerSprite(16, objective_pico_sprite, OBJECTIVE_PICO_SPRITE_WIDTH, OBJECTIVE_PICO_SPRITE_HEIGHT, 1);
 }
 
-PicoRenderer::~PicoRenderer() = default;
+PicoRenderer::~PicoRenderer() {
+    delete[] framebuffer;
+    framebuffer = nullptr;
+}
 
 void PicoRenderer::registerSprite(int id, const uint16_t* data, int width, int height, int frameCount) {
     assert(data != nullptr);
@@ -157,11 +164,6 @@ static const uint8_t HUD_FONT[12][8] = {
     {0x00, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x00},
     {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x00},
 };
-
-/** Full 320px landscape width; must be >= logicalWidth() after rotation. */
-static constexpr int kLandscapeLineBufferWidth = 320;
-/** One scanline of opaque RGB565 before drawImageDMA (library handles SPI encoding). */
-static uint16_t lineBuffer[kLandscapeLineBufferWidth];
 
 static constexpr int HUD_FONT_SCALE = 2;
 static constexpr int HUD_FONT_ADVANCE = 8 * HUD_FONT_SCALE;
@@ -199,7 +201,6 @@ uint16_t sampleSpritePixel(const SpriteData& sprite, int srcXCoord, int srcYCoor
 } // namespace
 
 void PicoRenderer::blitTransparentPixels(const uint16_t* base, int w, int h, int destX, int destY, bool flipHorizontal) {
-    // Game (destX, destY) and drawImageDMA(x,y) share the same logical space as fillRectDMA (offsets in board_config.h).
     const int sw = logicalWidth();
     const int sh = logicalHeight();
 
@@ -218,62 +219,26 @@ void PicoRenderer::blitTransparentPixels(const uint16_t* base, int w, int h, int
         int screenY = destY + dy;
         if (screenY < 0 || screenY >= sh) continue;
 
-        int bufferCount = 0;
-        int lineStartX = -1;
-
-        auto flushRun = [&]() {
-            if (bufferCount <= 0 || lineStartX < 0 || lineStartX >= sw) {
-                bufferCount = 0;
-                lineStartX = -1;
-                return;
-            }
-            int actualWidth = bufferCount;
-            if (lineStartX + actualWidth > sw) {
-                actualWidth = sw - lineStartX;
-            }
-            if (actualWidth > 0) {
-                display.drawImageDMA(static_cast<int16_t>(lineStartX), static_cast<int16_t>(screenY),
-                                     static_cast<int16_t>(actualWidth), 1, lineBuffer);
-            }
-            bufferCount = 0;
-            lineStartX = -1;
-        };
-
         for (int i = 0; i < drawW; i++) {
             const int dx = clipLeft + i;
             const int screenX = destX + dx;
-            if (screenX < 0) continue;
+            if (screenX < 0 || screenX >= sw) continue;
 
             int lx = flipHorizontal ? (w - 1 - dx) : dx;
             uint16_t pixel = base[dy * w + lx];
 
             if (pixel != 0xF81F) {
-                if (lineStartX == -1) {
-                    lineStartX = screenX;
-                    bufferCount = 0;
-                } else if (screenX != lineStartX + bufferCount) {
-                    flushRun();
-                    lineStartX = screenX;
-                    bufferCount = 0;
-                }
-                if (bufferCount < kLandscapeLineBufferWidth) {
-                    lineBuffer[bufferCount++] = pixel;
-                }
-            } else {
-                flushRun();
+                framebuffer[screenY * SCREEN_WIDTH + screenX] = pixel;
             }
         }
-
-        flushRun();
     }
 }
 
 void PicoRenderer::clear(Color color) {
     uint16_t rgb565 = rgb888_to_rgb565(color.r, color.g, color.b);
-    // fillScreen uses Graphics::fillRect when DMA is off; that toggles CS per 128px batch.
-    // fillRectDMA uses HAL solid fill with one CS session (matches sprite path).
-    display.fillRectDMA(0, 0, static_cast<int16_t>(logicalWidth()), static_cast<int16_t>(logicalHeight()),
-                        rgb565);
+    for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; i++) {
+        framebuffer[i] = rgb565;
+    }
 }
 
 void PicoRenderer::beginFrame() {
@@ -281,6 +246,8 @@ void PicoRenderer::beginFrame() {
 }
 
 void PicoRenderer::endFrame() {
+    // SPI byte order for RGB565 is handled inside HAL (rgb565_to_spi_bytes / rgb565_to_dma_word).
+    display.drawImageDMA(0, 0, static_cast<int16_t>(SCREEN_WIDTH), static_cast<int16_t>(SCREEN_HEIGHT), framebuffer);
 }
 
 void PicoRenderer::drawRect(const Rect& rect, Color color, bool filled) {
@@ -320,22 +287,25 @@ void PicoRenderer::drawRect(const Rect& rect, Color color, bool filled) {
     uint16_t rgb565 = rgb888_to_rgb565(color.r, color.g, color.b);
     
     if (filled) {
-        display.fillRectDMA(static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(w),
-                            static_cast<int16_t>(h), rgb565);
-    } else {
-        display.fillRectDMA(static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(w), 1, rgb565);
-        
-        if (h > 1) {
-            display.fillRectDMA(static_cast<int16_t>(x), static_cast<int16_t>(y + h - 1), static_cast<int16_t>(w), 1,
-                                rgb565);
+        for (int yy = y; yy < y + h; yy++) {
+            for (int xx = x; xx < x + w; xx++) {
+                framebuffer[yy * SCREEN_WIDTH + xx] = rgb565;
+            }
         }
-        
+    } else {
+        for (int xx = x; xx < x + w; xx++) {
+            framebuffer[y * SCREEN_WIDTH + xx] = rgb565;
+        }
+        if (h > 1) {
+            for (int xx = x; xx < x + w; xx++) {
+                framebuffer[(y + h - 1) * SCREEN_WIDTH + xx] = rgb565;
+            }
+        }
         if (h > 2) {
-            display.fillRectDMA(static_cast<int16_t>(x), static_cast<int16_t>(y + 1), 1, static_cast<int16_t>(h - 2),
-                                rgb565);
-            
-            display.fillRectDMA(static_cast<int16_t>(x + w - 1), static_cast<int16_t>(y + 1), 1,
-                                static_cast<int16_t>(h - 2), rgb565);
+            for (int yy = y + 1; yy < y + h - 1; yy++) {
+                framebuffer[yy * SCREEN_WIDTH + x] = rgb565;
+                framebuffer[yy * SCREEN_WIDTH + (x + w - 1)] = rgb565;
+            }
         }
     }
 }
@@ -392,31 +362,10 @@ void PicoRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect& ds
         int screenY = destY + dy;
         if (screenY < 0 || screenY >= sh) continue;
 
-        int bufferCount = 0;
-        int lineStartX = -1;
-
-        auto flushRun = [&]() {
-            if (bufferCount <= 0 || lineStartX < 0 || lineStartX >= sw) {
-                bufferCount = 0;
-                lineStartX = -1;
-                return;
-            }
-            int actualWidth = bufferCount;
-            if (lineStartX + actualWidth > sw) {
-                actualWidth = sw - lineStartX;
-            }
-            if (actualWidth > 0) {
-                display.drawImageDMA(static_cast<int16_t>(lineStartX), static_cast<int16_t>(screenY),
-                                     static_cast<int16_t>(actualWidth), 1, lineBuffer);
-            }
-            bufferCount = 0;
-            lineStartX = -1;
-        };
-
         for (int i = 0; i < drawW; i++) {
             const int dx = clipLeft + i;
             const int screenX = destX + dx;
-            if (screenX < 0) continue;
+            if (screenX < 0 || screenX >= sw) continue;
 
             int srcXCoord = flipHorizontal ? (srcX + srcW - 1 - dx) : (srcX + dx);
             int srcYCoord = srcY + dy;
@@ -424,23 +373,9 @@ void PicoRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect& ds
             uint16_t pixel = sampleSpritePixel(sprite, srcXCoord, srcYCoord);
 
             if (pixel != 0xF81F) {
-                if (lineStartX == -1) {
-                    lineStartX = screenX;
-                    bufferCount = 0;
-                } else if (screenX != lineStartX + bufferCount) {
-                    flushRun();
-                    lineStartX = screenX;
-                    bufferCount = 0;
-                }
-                if (bufferCount < kLandscapeLineBufferWidth) {
-                    lineBuffer[bufferCount++] = pixel;
-                }
-            } else {
-                flushRun();
+                framebuffer[screenY * SCREEN_WIDTH + screenX] = pixel;
             }
         }
-
-        flushRun();
     }
 }
 
@@ -497,7 +432,9 @@ void PicoRenderer::drawText(const char* text, int x, int y, Color color) {
 
     const int sw = logicalWidth();
     const int sh = logicalHeight();
-    uint16_t rgb565 = rgb888_to_rgb565(color.r, color.g, color.b);
+    const uint16_t rgb565 = rgb888_to_rgb565(color.r, color.g, color.b);
+    constexpr uint16_t kChromaKey = 0xF81F;
+    constexpr int kCell = 8 * HUD_FONT_SCALE;
 
     int penX = x;
     for (const char* p = text; *p; ++p) {
@@ -505,25 +442,31 @@ void PicoRenderer::drawText(const char* text, int x, int y, Color color) {
             penX += HUD_FONT_ADVANCE;
             continue;
         }
-        int gi = hudGlyphIndex(*p);
+        const int gi = hudGlyphIndex(*p);
         if (gi < 0) {
             continue;
         }
 
+        uint16_t cell[16 * 16];
+        for (int i = 0; i < 16 * 16; ++i) {
+            cell[i] = kChromaKey;
+        }
         const uint8_t* rows = HUD_FONT[gi];
         for (int row = 0; row < 8; ++row) {
-            uint8_t bits = rows[row];
+            const uint8_t bits = rows[row];
             for (int col = 0; col < 8; ++col) {
                 if ((bits & (0x80u >> col)) == 0) continue;
                 for (int dy = 0; dy < HUD_FONT_SCALE; ++dy) {
                     for (int dx = 0; dx < HUD_FONT_SCALE; ++dx) {
-                        int sx = penX + col * HUD_FONT_SCALE + dx;
-                        int sy = y + row * HUD_FONT_SCALE + dy;
-                        if (sx < 0 || sx >= sw || sy < 0 || sy >= sh) continue;
-                        display.drawPixel(static_cast<int16_t>(sx), static_cast<int16_t>(sy), rgb565);
+                        const int lx = col * HUD_FONT_SCALE + dx;
+                        const int ly = row * HUD_FONT_SCALE + dy;
+                        cell[ly * kCell + lx] = rgb565;
                     }
                 }
             }
+        }
+        if (penX < sw && penX + kCell > 0 && y < sh && y + kCell > 0) {
+            blitTransparentPixels(cell, kCell, kCell, penX, y, false);
         }
         penX += HUD_FONT_ADVANCE;
     }

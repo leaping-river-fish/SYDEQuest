@@ -31,13 +31,18 @@ public:
     
     int loadTexture(const char* path) override;
     
-    int getScreenWidth() const override { return logicalWidth(); }
-    int getScreenHeight() const override { return logicalHeight(); }
+    int getScreenWidth() const override { return SCREEN_WIDTH; }
+    int getScreenHeight() const override { return SCREEN_HEIGHT; }
     
 private:
+    static const int SCREEN_WIDTH = 320;
+    static const int SCREEN_HEIGHT = 240;
+
     /** Logical framebuffer size after ST7789 rotation (landscape); matches CASET/RASET from the driver. */
     int logicalWidth() const { return static_cast<int>(display.hal().getConfig().width); }
     int logicalHeight() const { return static_cast<int>(display.hal().getConfig().height); }
+
+    uint16_t* framebuffer;
 
     static constexpr int kMaxSprites = 20;
     SpriteData sprites[kMaxSprites];

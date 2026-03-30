@@ -15,4 +15,7 @@ inline constexpr uint16_t kSt7789RowOffset = 0;
 inline constexpr uint16_t kSt7789RamColMax = 0;
 inline constexpr uint16_t kSt7789RamRowMax = 0;
 
+/** ST7789 MADCTL BGR bit; set false if hues are wrong the other way on your panel. */
+inline constexpr bool kSt7789RgbOrderBgr = true;
+
 } // namespace BoardConfig

@@ -239,6 +239,10 @@ void ST7789::setRotation(Rotation rotation) {
             _hal.setHeight(native_width);
             break;
     }
+
+    if (_hal.getConfig().rgb_order_bgr) {
+        madctl = static_cast<uint8_t>(madctl | MADCTL_BGR);
+    }
     
     _hal.writeCommand(ST7789_MADCTL);
     _hal.writeData(madctl);
@@ -256,11 +260,8 @@ void ST7789::invertDisplay(bool invert) {
 }
 
 void ST7789::fillScreen(uint16_t color) {
-    if (_hal.isDmaEnabled()) {
-        fillRectDMA(0, 0, _hal.getConfig().width, _hal.getConfig().height, color);
-    } else {
-        _gfx.fillRect(0, 0, _hal.getConfig().width, _hal.getConfig().height, color);
-    }
+    // Always fillRectDMA: HAL holds CS for the full RAMWR stream (Graphics::fillRect toggles CS per batch when DMA off).
+    fillRectDMA(0, 0, _hal.getConfig().width, _hal.getConfig().height, color);
 }
 
 void ST7789::sleepDisplay(bool sleep) {
