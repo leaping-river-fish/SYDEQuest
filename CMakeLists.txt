@@ -123,6 +123,8 @@ elseif(TARGET_PLATFORM STREQUAL "pico")
         hardware_gpio
         hardware_pwm
         hardware_dma
+        hardware_adc
+        hardware_i2c
         st7789_lib
     )
     

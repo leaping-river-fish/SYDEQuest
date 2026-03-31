@@ -1,28 +1,19 @@
 #include "PicoInput.h"
-#include "pico/stdlib.h"
+#include "hardware/adc.h"
 #include "hardware/gpio.h"
+#include "pico/stdlib.h"
 
 PicoInput::PicoInput() : currentState(0), previousState(0) {
-    gpio_init(PIN_LEFT);
-    gpio_init(PIN_RIGHT);
-    gpio_init(PIN_A);
-    gpio_init(PIN_DOWN);
-    gpio_init(PIN_START);
-    gpio_init(PIN_B);
-    
-    gpio_set_dir(PIN_LEFT, GPIO_IN);
-    gpio_set_dir(PIN_RIGHT, GPIO_IN);
-    gpio_set_dir(PIN_A, GPIO_IN);
-    gpio_set_dir(PIN_DOWN, GPIO_IN);
-    gpio_set_dir(PIN_START, GPIO_IN);
-    gpio_set_dir(PIN_B, GPIO_IN);
-    
-    gpio_pull_up(PIN_LEFT);
-    gpio_pull_up(PIN_RIGHT);
-    gpio_pull_up(PIN_A);
-    gpio_pull_up(PIN_DOWN);
-    gpio_pull_up(PIN_START);
-    gpio_pull_up(PIN_B);
+    adc_init();
+    adc_gpio_init(PIN_JOY_X);
+    adc_gpio_init(PIN_JOY_Y);
+
+    gpio_init(PIN_FIRE);
+    gpio_init(PIN_PAUSE);
+    gpio_set_dir(PIN_FIRE, GPIO_IN);
+    gpio_set_dir(PIN_PAUSE, GPIO_IN);
+    gpio_pull_up(PIN_FIRE);
+    gpio_pull_up(PIN_PAUSE);
 }
 
 int PicoInput::buttonToBit(Button button) const {
@@ -40,13 +31,33 @@ int PicoInput::buttonToBit(Button button) const {
 void PicoInput::update() {
     previousState = currentState;
     currentState = 0;
-    
-    if (!gpio_get(PIN_LEFT)) currentState |= (1 << 0);
-    if (!gpio_get(PIN_RIGHT)) currentState |= (1 << 1);
-    if (!gpio_get(PIN_A)) currentState |= (1 << 2);
-    if (!gpio_get(PIN_DOWN)) currentState |= (1 << 3);
-    if (!gpio_get(PIN_START)) currentState |= (1 << 4);
-    if (!gpio_get(PIN_B)) currentState |= (1 << 5);
+
+    adc_select_input(0);
+    const uint16_t joyX = adc_read();
+    adc_select_input(1);
+    const uint16_t joyYRaw = adc_read();
+    // Hardware Y is inverted (physical up = low ADC, down = high). Normalize so joyY rises with physical up.
+    const uint16_t joyY = 4095 - joyYRaw;
+
+    if (joyX < LOW_THRESHOLD) {
+        currentState |= (1 << 0);
+    }
+    if (joyX > HIGH_THRESHOLD) {
+        currentState |= (1 << 1);
+    }
+    if (joyY < LOW_THRESHOLD) {
+        currentState |= (1 << 3);  // Button::Down
+    }
+    if (joyY > HIGH_THRESHOLD) {
+        currentState |= (1 << 2);  // Button::Jump
+    }
+
+    if (!gpio_get(PIN_FIRE)) {
+        currentState |= (1 << 5);
+    }
+    if (!gpio_get(PIN_PAUSE)) {
+        currentState |= (1 << 4);
+    }
 }
 
 bool PicoInput::isPressed(Button button) const {

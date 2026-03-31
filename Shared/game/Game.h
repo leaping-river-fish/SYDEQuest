@@ -115,13 +115,10 @@ private:
         bool isActive;
         bool wasRendered;
     };
-    EntityState basicEnemyStates[25];
-    EntityState rangedEnemyStates[20];
     EntityState healthPackStates[1];
     EntityState objectiveStates[1];
-    
-    static constexpr fixed_t ACTIVATION_DISTANCE = TO_FIXED(400.0f);
-    static constexpr fixed_t DEACTIVATION_DISTANCE = TO_FIXED(500.0f);
+
+    /** Enemy updates are not distance-culled on Pico (small pools; always simulate active slots). */
 #else
     std::vector<Projectile> projectiles;
     std::vector<BasicEnemy> basicEnemies;
@@ -130,7 +127,6 @@ private:
     std::vector<HealthPack> healthPacks;
     std::vector<Objective> objectives;
     
-    static constexpr float ACTIVATION_DISTANCE = 400.0f;
     static constexpr float DEACTIVATION_DISTANCE = 500.0f;
 #endif
     

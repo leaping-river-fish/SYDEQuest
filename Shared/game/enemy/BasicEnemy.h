@@ -51,4 +51,6 @@ private:
     void checkEdgeDetection(const Level& level);
     void checkWallCollision(const Level& level);
     void applyGravity(float deltaTime);
+    /** Swept vertical resolution (matches player) so large dt cannot tunnel floors/platforms. */
+    void resolveVerticalTerrain(const Level& level, fixed_t prevY);
 };

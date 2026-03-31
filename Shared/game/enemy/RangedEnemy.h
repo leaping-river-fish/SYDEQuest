@@ -84,6 +84,7 @@ private:
     void checkEdgeDetection(const Level& level);
     void checkWallCollision(const Level& level);
     void applyGravity(float deltaTime);
+    void resolveVerticalTerrain(const Level& level, fixed_t prevY);
     bool hasLineOfSight(Vec2 targetPos, const Level& level) const;
     bool canDetectPlayer(const Player& player, const Level& level) const;
 };

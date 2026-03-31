@@ -2,11 +2,11 @@ add bosses and levels
 
 BOSSES (PLEASE LET THESE BE EASY TO IMPLEMENT):
 
-ROBERT HUNTER - LASER BEAMS/OPTICS (WALL BOUNCING LASERS?) Electromagnetic wave shield?
+ROBERT HUNTER - Wall Bouncing? LASER BEAMS/OPTICS
 
-SEAN SPEZIALE - INTEGRALS AND SIN/COS WAVES, Summons calc quizzes 
+SEAN SPEZIALE - Summons calc quizzes 
 
-CALVIN YOUNG - WRENCHES, WIRES, MACHINERY? projectiles that explode with shrapnel?
+CALVIN YOUNG - Projectiles that explode with shrapnel
 
 
 Beautify:
@@ -17,13 +17,17 @@ Add Start Screen
 
 AFTER HARDWARE:
 
-Fix enemy AI
+1. Fix enemy AI DONE
 
-7 LEVELS total
+2. Player movement/controls -> player cannot stand on platforms, player does not die
 
-BOSS LEVELS: 3, 5, 7
+3. Haptics
 
-LEVELS WITH OBJECTIVES: 2, 3, 4, 5, 6, 7
+4. 7 LEVELS total
+
+5. BOSS LEVELS: 3, 5, 7
+
+6. LEVELS WITH OBJECTIVES: 2, 3, 4, 5, 6, 7
 
 
 

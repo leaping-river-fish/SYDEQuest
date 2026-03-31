@@ -11,13 +11,7 @@
     #include <string>
 #endif
 
-#ifdef PLATFORM_PICO
-inline fixed_t distanceSquared(const Vec2& a, const Vec2& b) {
-    fixed_t dx = a.x - b.x;
-    fixed_t dy = a.y - b.y;
-    return FIXED_MUL(dx, dx) + FIXED_MUL(dy, dy);
-}
-#else
+#ifndef PLATFORM_PICO
 inline float distanceSquared(const Vec2& a, const Vec2& b) {
     float dx = a.x - b.x;
     float dy = a.y - b.y;
@@ -85,6 +79,7 @@ void Game::resetAndSpawnEntitiesPico() {
     player.position = level.getSpawnPoint();
     player.velocity = Vec2(0.0f, 0.0f);
     player.setGrounded(false);
+    player.invincibilityTimer = 0.0f;
 
     projectiles.clear();
     basicEnemies.clear();
@@ -93,14 +88,6 @@ void Game::resetAndSpawnEntitiesPico() {
     healthPacks.clear();
     objectives.clear();
 
-    for (size_t i = 0; i < 25; i++) {
-        basicEnemyStates[i].isActive = false;
-        basicEnemyStates[i].wasRendered = false;
-    }
-    for (size_t i = 0; i < 20; i++) {
-        rangedEnemyStates[i].isActive = false;
-        rangedEnemyStates[i].wasRendered = false;
-    }
     for (size_t i = 0; i < 1; i++) {
         healthPackStates[i].isActive = false;
         healthPackStates[i].wasRendered = false;
@@ -236,14 +223,16 @@ void Game::update() {
 #endif
     collision.resolveHorizontal(player, level);
     
-    // Move Y and resolve
+    // Move Y and resolve (prevY enables swept vertical collision so large dt cannot tunnel solids)
     player.setGrounded(false);
 #ifdef PLATFORM_PICO
+    fixed_t prevY = player.position.y;
     player.position.y += FIXED_MUL(player.velocity.y, dtFixed);
 #else
+    fixed_t prevY = player.position.y;
     player.position.y += player.velocity.y * dt;
 #endif
-    collision.resolveVertical(player, level);
+    collision.resolveVertical(player, level, prevY);
     
     // Update animation/state
     player.update(dt);
@@ -308,32 +297,16 @@ void Game::update() {
     }
 #endif
     
-    // Update basic + ranged enemies (Pico: distance culling matches desktop DEACTIVATION_DISTANCE)
+    // Update basic + ranged enemies (Pico: no distance culling — see Game.h)
 #ifdef PLATFORM_PICO
-    fixed_t deactivationDistSq = FIXED_MUL(DEACTIVATION_DISTANCE, DEACTIVATION_DISTANCE);
-    
     for (size_t i = 0; i < basicEnemies.count; i++) {
         if (!basicEnemies.isActive(i)) continue;
-        
-        fixed_t distSq = distanceSquared(player.position, basicEnemies[i].position);
-        
-        basicEnemyStates[i].isActive = distSq < deactivationDistSq;
-        
-        if (basicEnemyStates[i].isActive) {
-            basicEnemies[i].update(dt, level);
-        }
+        basicEnemies[i].update(dt, level);
     }
     
     for (size_t i = 0; i < rangedEnemies.count; i++) {
         if (!rangedEnemies.isActive(i)) continue;
-        
-        fixed_t distSq = distanceSquared(player.position, rangedEnemies[i].position);
-        
-        rangedEnemyStates[i].isActive = distSq < deactivationDistSq;
-        
-        if (rangedEnemyStates[i].isActive) {
-            rangedEnemies[i].update(dt, level, player, enemyProjectiles);
-        }
+        rangedEnemies[i].update(dt, level, player, enemyProjectiles);
     }
 #else
     for (auto& enemy : basicEnemies) {
@@ -358,7 +331,9 @@ void Game::update() {
         for (size_t i = 0; i < basicEnemies.size(); i++) {
             if (!basicEnemies.isActive(i)) continue;
             if (playerRect.intersects(basicEnemies[i].getCollider())) {
-                player.health -= 1;
+                if (player.health > 0) {
+                    player.health -= 1;
+                }
                 player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                 break;
             }
@@ -368,7 +343,9 @@ void Game::update() {
             for (size_t i = 0; i < rangedEnemies.size(); i++) {
                 if (!rangedEnemies.isActive(i)) continue;
                 if (playerRect.intersects(rangedEnemies[i].getCollider())) {
-                    player.health -= 1;
+                    if (player.health > 0) {
+                        player.health -= 1;
+                    }
                     player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                     break;
                 }
@@ -377,7 +354,9 @@ void Game::update() {
 #else
         for (const auto& enemy : basicEnemies) {
             if (playerRect.intersects(enemy.getCollider())) {
-                player.health -= 1;
+                if (player.health > 0) {
+                    player.health -= 1;
+                }
                 player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                 break;
             }
@@ -386,7 +365,9 @@ void Game::update() {
         if (player.invincibilityTimer <= 0.0f) {
             for (const auto& enemy : rangedEnemies) {
                 if (playerRect.intersects(enemy.getCollider())) {
-                    player.health -= 1;
+                    if (player.health > 0) {
+                        player.health -= 1;
+                    }
                     player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                     break;
                 }
@@ -513,7 +494,12 @@ void Game::update() {
         if (!enemyProjectiles.isActive(i)) continue;
         if (enemyProjectiles[i].getCollider().intersects(player.getCollider())) {
             enemyProjectiles[i].shouldDestroy = true;
-            player.health -= 1;
+            if (player.invincibilityTimer <= 0.0f) {
+                if (player.health > 0) {
+                    player.health -= 1;
+                }
+                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+            }
         }
     }
     
@@ -536,7 +522,12 @@ void Game::update() {
     for (auto& projectile : enemyProjectiles) {
         if (projectile.getCollider().intersects(player.getCollider())) {
             projectile.shouldDestroy = true;
-            player.health -= 1;
+            if (player.invincibilityTimer <= 0.0f) {
+                if (player.health > 0) {
+                    player.health -= 1;
+                }
+                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+            }
         }
     }
     
@@ -614,7 +605,11 @@ void Game::update() {
     
     // Check player death
     if (player.health <= 0) {
+#ifdef PLATFORM_PICO
+        resetAndSpawnEntitiesPico();
+#else
         loadLevel(currentLevelName);
+#endif
         player.health = 1;
     }
 }

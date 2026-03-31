@@ -5,24 +5,24 @@
 class PicoInput : public IInput {
 public:
     PicoInput();
-    
+
     void update() override;
     bool isPressed(Button button) const override;
     bool wasJustPressed(Button button) const override;
     bool wasJustReleased(Button button) const override;
-    
+
 private:
     uint16_t currentState;
     uint16_t previousState;
-    
-    static constexpr int PIN_UP = 0;
-    static constexpr int PIN_DOWN = 1;
-    static constexpr int PIN_LEFT = 2;
-    static constexpr int PIN_RIGHT = 3;
-    static constexpr int PIN_A = 4;
-    static constexpr int PIN_B = 5;
-    static constexpr int PIN_START = 6;
-    static constexpr int PIN_SELECT = 7;
-    
+
+    static constexpr int PIN_JOY_X = 26;
+    static constexpr int PIN_JOY_Y = 27;
+    static constexpr int PIN_FIRE = 6;
+    static constexpr int PIN_PAUSE = 7;
+
+    /** Wider neutral band (800–3200) reduces spurious Jump/Down from ADC noise at rest. */
+    static constexpr uint16_t LOW_THRESHOLD = 800;
+    static constexpr uint16_t HIGH_THRESHOLD = 3200;
+
     int buttonToBit(Button button) const;
 };
