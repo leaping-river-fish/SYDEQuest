@@ -75,7 +75,7 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
     st7789::Config cfg;
     cfg.spi_inst = spi1;
     // 20 MHz helps rule out signal integrity issues on jumper wiring; increase if stable.
-    cfg.spi_speed_hz = 27'000'000;
+    cfg.spi_speed_hz = 30'000'000;
     cfg.pin_din = 11;
     cfg.pin_sck = 10;
     cfg.pin_cs = 9;

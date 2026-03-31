@@ -34,6 +34,15 @@ class Level {
 public:
     static constexpr int TILE_SIZE = 16;
     static constexpr int PLATFORM_HEIGHT = 8;
+    /** Pico fixed tile buffer capacity (row-major); arbitrary levels must fit within this many cells. */
+    static constexpr int MAX_TILE_COUNT = 128 * 64;
+#ifdef PLATFORM_PICO
+    static constexpr int MAX_PORTALS = 1;
+    static constexpr int MAX_BASIC_ENEMIES = 20;
+    static constexpr int MAX_RANGED_ENEMIES = 20;
+    static constexpr int MAX_HEALTH_PACKS = 1;
+    static constexpr int MAX_OBJECTIVES = 1;
+#endif
 
     Level();
     ~Level();
@@ -84,18 +93,18 @@ private:
     Vec2 spawnPoint;
     
 #ifdef PLATFORM_PICO
-    int8_t tileIds[128 * 64];
-    Portal portals[1];
+    int8_t tileIds[MAX_TILE_COUNT];
+    Portal portals[MAX_PORTALS];
     uint8_t portalCount;
-    Vec2 basicEnemySpawns[10];
+    Vec2 basicEnemySpawns[MAX_BASIC_ENEMIES];
     uint8_t basicEnemySpawnCount;
-    Vec2 rangedEnemySpawns[20];
+    Vec2 rangedEnemySpawns[MAX_RANGED_ENEMIES];
     uint8_t rangedEnemySpawnCount;
-    Vec2 healthPackSpawns[1];
+    Vec2 healthPackSpawns[MAX_HEALTH_PACKS];
     uint8_t healthPackSpawnCount;
-    Vec2 objectiveSpawns[1];
+    Vec2 objectiveSpawns[MAX_OBJECTIVES];
     uint8_t objectiveSpawnCount;
-    ObjectiveType objectiveTypes[1];
+    ObjectiveType objectiveTypes[MAX_OBJECTIVES];
 #else
     int8_t* tileIds;
     std::vector<Portal> portals;

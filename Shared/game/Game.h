@@ -105,8 +105,8 @@ private:
     // Entities
 #ifdef PLATFORM_PICO
     EntityPool<Projectile, 20> projectiles;
-    EntityPool<BasicEnemy, 10> basicEnemies;
-    EntityPool<RangedEnemy, 10> rangedEnemies;
+    EntityPool<BasicEnemy, Level::MAX_BASIC_ENEMIES> basicEnemies;
+    EntityPool<RangedEnemy, Level::MAX_RANGED_ENEMIES> rangedEnemies;
     EntityPool<EnemyProjectile, 30> enemyProjectiles;
     EntityPool<HealthPack, 1> healthPacks;
     EntityPool<Objective, 1> objectives;
@@ -115,8 +115,8 @@ private:
         bool isActive;
         bool wasRendered;
     };
-    EntityState healthPackStates[1];
-    EntityState objectiveStates[1];
+    EntityState healthPackStates[Level::MAX_HEALTH_PACKS];
+    EntityState objectiveStates[Level::MAX_OBJECTIVES];
 
     /** Enemy updates are not distance-culled on Pico (small pools; always simulate active slots). */
 #else

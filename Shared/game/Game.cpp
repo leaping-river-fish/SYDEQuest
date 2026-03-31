@@ -11,6 +11,11 @@
     #include <string>
 #endif
 
+#ifdef PLATFORM_PICO
+#include "../../Pico/assets/level1_data.h"
+#include "../../Pico/assets/level2_data.h"
+#endif
+
 #ifndef PLATFORM_PICO
 inline float distanceSquared(const Vec2& a, const Vec2& b) {
     float dx = a.x - b.x;
@@ -88,11 +93,11 @@ void Game::resetAndSpawnEntitiesPico() {
     healthPacks.clear();
     objectives.clear();
 
-    for (size_t i = 0; i < 1; i++) {
+    for (size_t i = 0; i < Level::MAX_HEALTH_PACKS; i++) {
         healthPackStates[i].isActive = false;
         healthPackStates[i].wasRendered = false;
     }
-    for (size_t i = 0; i < 1; i++) {
+    for (size_t i = 0; i < Level::MAX_OBJECTIVES; i++) {
         objectiveStates[i].isActive = false;
         objectiveStates[i].wasRendered = false;
     }
@@ -148,10 +153,23 @@ void Game::syncEntitiesFromCurrentLevel(const char* levelNameForTracking) {
 #endif
 
 bool Game::loadLevel(const char* levelName) {
+#ifdef PLATFORM_PICO
+    // Embedded build: CSV paths from portals are not on a filesystem; use baked level data.
+    bool ok = false;
+    if (std::strstr(levelName, "Level2") != nullptr) {
+        ok = level.loadFromBinaryData(level2_tiles, level2_width, level2_height, &level2_metadata);
+    } else {
+        ok = level.loadFromBinaryData(level1_tiles, level1_width, level1_height, &level1_metadata);
+    }
+    if (!ok) {
+        return false;
+    }
+#else
     if (!level.loadFromFile(levelName)) {
         return false;
     }
-    
+#endif
+
     strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
     currentLevelName[sizeof(currentLevelName) - 1] = '\0';
     

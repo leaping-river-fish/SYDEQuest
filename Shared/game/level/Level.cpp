@@ -9,13 +9,7 @@
 #endif
 
 Level::Level() : width(0), height(0), spawnPoint(100, 100) {
-#ifdef PLATFORM_PICO
-    portalCount = 0;
-    basicEnemySpawnCount = 0;
-    rangedEnemySpawnCount = 0;
-    healthPackSpawnCount = 0;
-    objectiveSpawnCount = 0;
-#else
+#ifndef PLATFORM_PICO
     tileIds = nullptr;
 #endif
     loadTestLevel();
@@ -64,9 +58,14 @@ int8_t Level::getTileId(int tileX, int tileY) const {
 
 bool Level::isSolid(int tileX, int tileY) const {
     int8_t tileId = getTileId(tileX, tileY);
-    // 0–11: standard blocks; 15: terrain/decoration (e.g. bridge caps) — collides like a block
     if (tileId < 0) return false;
-    return tileId <= 11 || tileId == 15;
+    if (tileId > 14) {
+#ifdef PLATFORM_PICO
+        printf("Warning: Invalid tile ID %d at (%d, %d)\n", static_cast<int>(tileId), tileX, tileY);
+#endif
+        return false;
+    }
+    return tileId <= 11;
 }
 
 bool Level::isPlatform(int tileX, int tileY) const {
@@ -124,7 +123,7 @@ bool Level::loadFromFile(const char* filename) {
     height = newHeight;
     
 #ifdef PLATFORM_PICO
-    if (width * height > 128 * 64) {
+    if (width * height > MAX_TILE_COUNT) {
         fclose(file);
         return false;
     }
@@ -177,7 +176,7 @@ bool Level::loadFromFile(const char* filename) {
                 portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
                 portal.targetSpawn = Vec2(tsx, tsy);
 #ifdef PLATFORM_PICO
-                if (portalCount < 8) {
+                if (portalCount < MAX_PORTALS) {
                     portals[portalCount++] = portal;
                 }
 #else
@@ -188,7 +187,7 @@ bool Level::loadFromFile(const char* filename) {
             float ex, ey;
             if (sscanf(line + 12, "%f %f", &ex, &ey) == 2) {
 #ifdef PLATFORM_PICO
-                if (basicEnemySpawnCount < 25) {
+                if (basicEnemySpawnCount < MAX_BASIC_ENEMIES) {
                     basicEnemySpawns[basicEnemySpawnCount++] = Vec2(ex, ey);
                 }
 #else
@@ -199,7 +198,7 @@ bool Level::loadFromFile(const char* filename) {
             float ex, ey;
             if (sscanf(line + 13, "%f %f", &ex, &ey) == 2) {
 #ifdef PLATFORM_PICO
-                if (rangedEnemySpawnCount < 20) {
+                if (rangedEnemySpawnCount < MAX_RANGED_ENEMIES) {
                     rangedEnemySpawns[rangedEnemySpawnCount++] = Vec2(ex, ey);
                 }
 #else
@@ -210,7 +209,7 @@ bool Level::loadFromFile(const char* filename) {
             float ex, ey;
             if (sscanf(line + 6, "%f %f", &ex, &ey) == 2) {
 #ifdef PLATFORM_PICO
-                if (basicEnemySpawnCount < 25) {
+                if (basicEnemySpawnCount < MAX_BASIC_ENEMIES) {
                     basicEnemySpawns[basicEnemySpawnCount++] = Vec2(ex, ey);
                 }
 #else
@@ -222,7 +221,7 @@ bool Level::loadFromFile(const char* filename) {
             float hx, hy;
             if (sscanf(line + 12, "%f %f", &hx, &hy) == 2) {
 #ifdef PLATFORM_PICO
-                if (healthPackSpawnCount < 1) {
+                if (healthPackSpawnCount < MAX_HEALTH_PACKS) {
                     healthPackSpawns[healthPackSpawnCount++] = Vec2(hx, hy);
                 }
 #else
@@ -250,7 +249,7 @@ bool Level::loadFromFile(const char* filename) {
                     continue;
                 }
 #ifdef PLATFORM_PICO
-                if (objectiveSpawnCount < 1) {
+                if (objectiveSpawnCount < MAX_OBJECTIVES) {
                     objectiveSpawns[objectiveSpawnCount] = Vec2(ox, oy);
                     objectiveTypes[objectiveSpawnCount] = type;
                     objectiveSpawnCount++;
@@ -263,6 +262,7 @@ bool Level::loadFromFile(const char* filename) {
     }
     
     fclose(file);
+    printf("Loaded level: %d x %d\n", width, height);
     return true;
 }
 
@@ -274,7 +274,7 @@ bool Level::loadFromData(const char* csvData) {
     
     const char* ptr = csvData;
     int newWidth = 0;
-    int newHeight = 0;
+    int newHeight = 1;
     
     const char* lineStart = ptr;
     while (*ptr && *ptr != '\n') {
@@ -295,7 +295,7 @@ bool Level::loadFromData(const char* csvData) {
         }
     }
     
-    if (newWidth <= 0 || newHeight <= 0 || newWidth * newHeight > 128 * 64) {
+    if (newWidth <= 0 || newHeight <= 0 || newWidth * newHeight > MAX_TILE_COUNT) {
         return false;
     }
     
@@ -321,7 +321,9 @@ bool Level::loadFromData(const char* csvData) {
                     value = value * 10 + (*ptr - '0');
                     ptr++;
                 }
-                tileIds[y * width + x] = negative ? -value : value;
+                if (x < width && y < height) {
+                    tileIds[y * width + x] = negative ? -value : value;
+                }
                 x++;
                 if (*ptr == ',') ptr++;
             } else {
@@ -360,35 +362,35 @@ bool Level::loadFromData(const char* csvData) {
                     strncpy(portal.targetLevel, targetFile, sizeof(portal.targetLevel) - 1);
                     portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
                     portal.targetSpawn = Vec2(tsx, tsy);
-                    if (portalCount < 8) {
+                    if (portalCount < MAX_PORTALS) {
                         portals[portalCount++] = portal;
                     }
                 }
             } else if (strncmp(line, "ENEMY_BASIC ", 12) == 0) {
                 float ex, ey;
                 if (sscanf(line + 12, "%f %f", &ex, &ey) == 2) {
-                    if (basicEnemySpawnCount < 25) {
+                    if (basicEnemySpawnCount < MAX_BASIC_ENEMIES) {
                         basicEnemySpawns[basicEnemySpawnCount++] = Vec2(ex, ey);
                     }
                 }
             } else if (strncmp(line, "ENEMY_RANGED ", 13) == 0) {
                 float ex, ey;
                 if (sscanf(line + 13, "%f %f", &ex, &ey) == 2) {
-                    if (rangedEnemySpawnCount < 20) {
+                    if (rangedEnemySpawnCount < MAX_RANGED_ENEMIES) {
                         rangedEnemySpawns[rangedEnemySpawnCount++] = Vec2(ex, ey);
                     }
                 }
             } else if (strncmp(line, "ENEMY ", 6) == 0) {
                 float ex, ey;
                 if (sscanf(line + 6, "%f %f", &ex, &ey) == 2) {
-                    if (basicEnemySpawnCount < 25) {
+                    if (basicEnemySpawnCount < MAX_BASIC_ENEMIES) {
                         basicEnemySpawns[basicEnemySpawnCount++] = Vec2(ex, ey);
                     }
                 }
             } else if (strncmp(line, "HEALTH_PACK ", 12) == 0) {
                 float hx, hy;
                 if (sscanf(line + 12, "%f %f", &hx, &hy) == 2) {
-                    if (healthPackSpawnCount < 1) {
+                    if (healthPackSpawnCount < MAX_HEALTH_PACKS) {
                         healthPackSpawns[healthPackSpawnCount++] = Vec2(hx, hy);
                     }
                 }
@@ -412,7 +414,7 @@ bool Level::loadFromData(const char* csvData) {
                     } else {
                         continue;
                     }
-                    if (objectiveSpawnCount < 1) {
+                    if (objectiveSpawnCount < MAX_OBJECTIVES) {
                         objectiveSpawns[objectiveSpawnCount] = Vec2(ox, oy);
                         objectiveTypes[objectiveSpawnCount] = type;
                         objectiveSpawnCount++;
@@ -424,43 +426,57 @@ bool Level::loadFromData(const char* csvData) {
         if (*ptr == '\n') ptr++;
     }
     
+    printf("Loaded level: %d x %d\n", width, height);
     return true;
 }
 
 bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
                                const LevelMetadata* metadata) {
     if (!tiles || !metadata) return false;
-    if (widthIn <= 0 || heightIn <= 0 || widthIn * heightIn > 128 * 64) return false;
+    if (widthIn <= 0 || heightIn <= 0 || widthIn * heightIn > MAX_TILE_COUNT) return false;
 
     unload();
 
     width = widthIn;
     height = heightIn;
-    std::memcpy(tileIds, tiles, static_cast<size_t>(width * height) * sizeof(int8_t));
+    // Row-major tile copy; width/height must be set before indexing (same as loadFromFile / loadFromData).
+    for (int i = 0; i < width * height; i++) {
+        tileIds[i] = -1;
+    }
+    for (int i = 0; i < width * height; i++) {
+        tileIds[i] = tiles[i];
+    }
 
     spawnPoint = Vec2(metadata->spawn.x, metadata->spawn.y);
     
-    for (uint8_t i = 0; i < metadata->enemyCount && i < (25 + 20); i++) {
+    for (uint8_t i = 0;
+         i < metadata->enemyCount && i < (MAX_BASIC_ENEMIES + MAX_RANGED_ENEMIES);
+         i++) {
         const EnemySpawnData& enemy = metadata->enemies[i];
         if (enemy.type == LevelEnemyType::BASIC) {
-            if (basicEnemySpawnCount < 25) {
+            if (basicEnemySpawnCount < MAX_BASIC_ENEMIES) {
                 basicEnemySpawns[basicEnemySpawnCount++] = Vec2(enemy.x, enemy.y);
             }
         } else if (enemy.type == LevelEnemyType::RANGED) {
-            if (rangedEnemySpawnCount < 20) {
+            if (rangedEnemySpawnCount < MAX_RANGED_ENEMIES) {
                 rangedEnemySpawns[rangedEnemySpawnCount++] = Vec2(enemy.x, enemy.y);
             }
         }
     }
     
-    for (uint8_t i = 0; i < metadata->healthPackCount && i < 1; i++) {
-        healthPackSpawns[healthPackSpawnCount++] = Vec2(
-            metadata->healthPacks[i].x,
-            metadata->healthPacks[i].y
-        );
+    for (uint8_t i = 0; i < metadata->healthPackCount && i < MAX_HEALTH_PACKS; i++) {
+        if (healthPackSpawnCount < MAX_HEALTH_PACKS) {
+            healthPackSpawns[healthPackSpawnCount++] = Vec2(
+                metadata->healthPacks[i].x,
+                metadata->healthPacks[i].y
+            );
+        }
     }
     
-    for (uint8_t i = 0; i < metadata->portalCount && i < 8; i++) {
+    for (uint8_t i = 0; i < metadata->portalCount && i < MAX_PORTALS; i++) {
+        if (portalCount >= MAX_PORTALS) {
+            break;
+        }
         const PortalData& pd = metadata->portals[i];
         Portal portal;
         portal.bounds = Rect(pd.x, pd.y, pd.w, pd.h);
@@ -476,7 +492,10 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
         portals[portalCount++] = portal;
     }
     
-    for (uint8_t i = 0; i < metadata->objectiveCount && i < 1; i++) {
+    for (uint8_t i = 0; i < metadata->objectiveCount && i < MAX_OBJECTIVES; i++) {
+        if (objectiveSpawnCount >= MAX_OBJECTIVES) {
+            break;
+        }
         const ObjectiveSpawnData& obj = metadata->objectives[i];
         objectiveSpawns[objectiveSpawnCount] = Vec2(obj.x, obj.y);
         
@@ -494,6 +513,7 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
         objectiveSpawnCount++;
     }
     
+    printf("Loaded level: %d x %d\n", width, height);
     return true;
 }
 #endif
