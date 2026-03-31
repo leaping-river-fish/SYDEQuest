@@ -15,11 +15,13 @@ Make Logo
 
 Add Start Screen
 
+Game over screen
+
 AFTER HARDWARE:
 
 1. Fix enemy AI DONE
 
-2. Player movement/controls -> player cannot stand on platforms, player does not die
+2. Player movement/controls DONE
 
 3. Haptics
 
@@ -28,6 +30,8 @@ AFTER HARDWARE:
 5. BOSS LEVELS: 3, 5, 7
 
 6. LEVELS WITH OBJECTIVES: 2, 3, 4, 5, 6, 7
+
+
 
 
 
