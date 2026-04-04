@@ -6,35 +6,49 @@
 #include "../level/Level.h"
 #include "../player/Player.h"
 
+#ifdef PLATFORM_PICO
+static constexpr int kBossDefaultHp = 20;
+#else
+static constexpr int kBossDefaultHp = 50;
+#endif
+
 BossEnemy::BossEnemy()
     : position(0.0f, 0.0f)
-    , health(20)
+    , health(kBossDefaultHp)
+    , maxHealth(kBossDefaultHp)
     , active(true)
     , activated(false)
-    , type(BossType::SUMMONER) {}
+    , type(BossType::SUMMONER)
+    , summonerState(BossState::Moving)
+    , currentWaypoint(0)
+    , stateTimer(0.0f)
+    , summonerSpawnedThisPhase(false) {}
 
 BossEnemy::BossEnemy(Vec2 spawn, BossType bossType)
     : position(spawn)
-    , health(20)
+    , health(kBossDefaultHp)
+    , maxHealth(kBossDefaultHp)
     , active(true)
     , activated(false)
-    , type(bossType) {}
+    , type(bossType)
+    , summonerState(BossState::Moving)
+    , currentWaypoint(0)
+    , stateTimer(0.0f)
+    , summonerSpawnedThisPhase(false) {}
 
 void BossEnemy::update(float deltaTime, const Level& level, const Player& player) {
     switch (type) {
-        case BossType::SUMMONER:
-            updateSummoner(deltaTime, level, player);
-            break;
         case BossType::LASER:
             updateLaser(deltaTime, level, player);
             break;
         case BossType::BULLET_HELL:
             updateBulletHell(deltaTime, level, player);
             break;
+        case BossType::SUMMONER:
+        default:
+            break;
     }
 }
-
-void BossEnemy::updateSummoner(float /*deltaTime*/, const Level& /*level*/, const Player& /*player*/) {}
 
 void BossEnemy::updateLaser(float /*deltaTime*/, const Level& /*level*/, const Player& /*player*/) {}
 

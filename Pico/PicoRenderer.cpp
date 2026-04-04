@@ -188,8 +188,8 @@ void PicoRenderer::registerSprite(int id, const uint16_t* data, int width, int h
 
 namespace {
 
-// 8x8 HUD glyphs (drawn 2x scaled => 16x16 cells): 0-9, 'x', '/', uppercase A-Z subset. MSB = left column.
-static const uint8_t HUD_FONT[23][8] = {
+// 8x8 HUD glyphs (scaled 1x or 2x): 0-9, 'x', '/', uppercase subset. MSB = left column.
+static const uint8_t HUD_FONT[27][8] = {
     // 0-9
     {0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00},
     {0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00},
@@ -217,6 +217,11 @@ static const uint8_t HUD_FONT[23][8] = {
     {0x63, 0x77, 0x6B, 0x63, 0x63, 0x63, 0x63, 0x00},
     {0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00},
     {0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00},
+    // S, N, Z, I ("Sean Speziale" / HUD)
+    {0x3C, 0x66, 0x60, 0x3C, 0x06, 0x66, 0x3C, 0x00},
+    {0x63, 0x73, 0x7B, 0x6F, 0x67, 0x63, 0x63, 0x00},
+    {0x7E, 0x06, 0x0C, 0x18, 0x30, 0x60, 0x7E, 0x00},
+    {0x3C, 0x18, 0x18, 0x18, 0x18, 0x18, 0x3C, 0x00},
 };
 
 static constexpr int HUD_FONT_SCALE = 2;
@@ -248,6 +253,10 @@ static int hudGlyphIndex(char c) {
         case 'M': return 20;
         case 'O': return 21;
         case 'V': return 22;
+        case 'S': return 23;
+        case 'N': return 24;
+        case 'Z': return 25;
+        case 'I': return 26;
         default: return -1;
     }
 }
@@ -505,18 +514,30 @@ void PicoRenderer::drawTile(int tileX, int tileY, int8_t tileId, int terrainSpri
 }
 
 void PicoRenderer::drawText(const char* text, int x, int y, Color color) {
+    drawTextScaled(text, x, y, color, HUD_FONT_SCALE);
+}
+
+void PicoRenderer::drawTextScaled(const char* text, int x, int y, Color color, int glyphScalePixels) {
     if (!text || text[0] == '\0') return;
+    int scale = glyphScalePixels;
+    if (scale < 1) {
+        scale = 1;
+    }
+    if (scale > 2) {
+        scale = 2;
+    }
 
     const int sw = logicalWidth();
     const int sh = logicalHeight();
     const uint16_t rgb565 = rgb888_to_rgb565(color.r, color.g, color.b);
     constexpr uint16_t kChromaKey = 0xF81F;
-    constexpr int kCell = 8 * HUD_FONT_SCALE;
+    const int kCell = 8 * scale;
+    const int advance = kCell;
 
     int penX = x;
     for (const char* p = text; *p; ++p) {
         if (*p == ' ') {
-            penX += HUD_FONT_ADVANCE;
+            penX += advance;
             continue;
         }
         const int gi = hudGlyphIndex(*p);
@@ -533,10 +554,10 @@ void PicoRenderer::drawText(const char* text, int x, int y, Color color) {
             const uint8_t bits = rows[row];
             for (int col = 0; col < 8; ++col) {
                 if ((bits & (0x80u >> col)) == 0) continue;
-                for (int dy = 0; dy < HUD_FONT_SCALE; ++dy) {
-                    for (int dx = 0; dx < HUD_FONT_SCALE; ++dx) {
-                        const int lx = col * HUD_FONT_SCALE + dx;
-                        const int ly = row * HUD_FONT_SCALE + dy;
+                for (int dy = 0; dy < scale; ++dy) {
+                    for (int dx = 0; dx < scale; ++dx) {
+                        const int lx = col * scale + dx;
+                        const int ly = row * scale + dy;
                         cell[ly * kCell + lx] = rgb565;
                     }
                 }
@@ -545,15 +566,26 @@ void PicoRenderer::drawText(const char* text, int x, int y, Color color) {
         if (penX < sw && penX + kCell > 0 && y < sh && y + kCell > 0) {
             blitTransparentPixels(cell, kCell, kCell, penX, y, false);
         }
-        penX += HUD_FONT_ADVANCE;
+        penX += advance;
     }
 }
 
 int PicoRenderer::measureTextWidth(const char* text) const {
+    return measureTextWidthScaled(text, HUD_FONT_SCALE);
+}
+
+int PicoRenderer::measureTextWidthScaled(const char* text, int glyphScalePixels) const {
     if (!text || !text[0]) {
         return 0;
     }
-    constexpr int advance = 8 * 2;  // matches HUD_FONT_SCALE in this file
+    int scale = glyphScalePixels;
+    if (scale < 1) {
+        scale = 1;
+    }
+    if (scale > 2) {
+        scale = 2;
+    }
+    const int advance = 8 * scale;
     int w = 0;
     for (const char* p = text; *p; ++p) {
         if (*p == ' ') {

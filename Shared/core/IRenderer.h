@@ -27,6 +27,16 @@ public:
     virtual void drawText(const char* text, int x, int y, Color color) = 0;
     virtual int measureTextWidth(const char* text) const = 0;
 
+    /** Pico bitmap font: 1 = 8px per glyph, 2 = 16px (default HUD). Desktop ignores scale. */
+    virtual void drawTextScaled(const char* text, int x, int y, Color color, int glyphScalePixels) {
+        (void)glyphScalePixels;
+        drawText(text, x, y, color);
+    }
+    virtual int measureTextWidthScaled(const char* text, int glyphScalePixels) const {
+        (void)glyphScalePixels;
+        return measureTextWidth(text);
+    }
+
     virtual int getScreenWidth() const = 0;
     virtual int getScreenHeight() const = 0;
 };

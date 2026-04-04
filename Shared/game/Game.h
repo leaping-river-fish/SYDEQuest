@@ -205,5 +205,10 @@ private:
 #ifdef PLATFORM_PICO
     void resetAndSpawnEntitiesPico();
 #endif
+
+    void updateSummonerBoss(BossEnemy& boss, float dt);
+    void rebuildArenaWallsFromActivatedBosses();
+    void resolveArenaWallsForPlayer();
+    void renderBossHealthBar();
 };
 

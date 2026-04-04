@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cctype>
+#include <cmath>
 
 #ifndef PLATFORM_PICO
     #include <string>
@@ -47,6 +48,22 @@ bool pointInRect(int px, int py, const Rect& r) {
            py >= static_cast<int>(r.y) && py < static_cast<int>(r.y + r.height);
 #endif
 }
+
+const Vec2 kSummonerWaypoints[8] = {
+    Vec2(528.0f, 752.0f),
+    Vec2(976.0f, 624.0f),
+    Vec2(528.0f, 688.0f),
+    Vec2(976.0f, 752.0f),
+    Vec2(608.0f, 544.0f),
+    Vec2(976.0f, 688.0f),
+    Vec2(528.0f, 624.0f),
+    Vec2(896.0f, 544.0f),
+};
+constexpr float kSummonerMoveSpeed = 400.0f;
+constexpr float kSummonerWaypointArrivePx = 10.0f;
+constexpr float kSummonerSummonSeconds = 3.0f;
+/** Spawn ranged enemy this many seconds after summoning starts; remaining time is warning before the boss moves. */
+constexpr float kSummonerEnemySpawnAfterSeconds = 1.0f;
 }  // namespace
 
 #ifndef PLATFORM_PICO
@@ -545,15 +562,31 @@ void Game::update() {
         if (!bosses.isActive(i)) continue;
         BossEnemy& b = bosses[i];
         if (!b.active || !b.activated) continue;
-        b.update(dt, level, player);
+        switch (b.type) {
+            case BossType::SUMMONER:
+                updateSummonerBoss(b, dt);
+                break;
+            default:
+                b.update(dt, level, player);
+                break;
+        }
     }
 #else
     for (auto& boss : bosses) {
         if (!boss.active || !boss.activated) continue;
-        boss.update(dt, level, player);
+        switch (boss.type) {
+            case BossType::SUMMONER:
+                updateSummonerBoss(boss, dt);
+                break;
+            default:
+                boss.update(dt, level, player);
+                break;
+        }
     }
 #endif
-    
+    rebuildArenaWallsFromActivatedBosses();
+    resolveArenaWallsForPlayer();
+
     // Check enemy collision damage
     if (player.invincibilityTimer <= 0.0f) {
         Rect playerRect = player.getCollider();
@@ -584,6 +617,22 @@ void Game::update() {
                 }
             }
         }
+
+        if (player.invincibilityTimer <= 0.0f) {
+            for (size_t i = 0; i < bosses.size(); i++) {
+                if (!bosses.isActive(i)) continue;
+                BossEnemy& b = bosses[i];
+                if (!b.active || !b.activated) continue;
+                if (playerRect.intersects(b.getCollider())) {
+                    if (player.health > 0) {
+                        player.health -= 1;
+                        notifyPlayerDamageHaptics();
+                    }
+                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    break;
+                }
+            }
+        }
 #else
         for (const auto& enemy : basicEnemies) {
             if (playerRect.intersects(enemy.getCollider())) {
@@ -599,6 +648,20 @@ void Game::update() {
         if (player.invincibilityTimer <= 0.0f) {
             for (const auto& enemy : rangedEnemies) {
                 if (playerRect.intersects(enemy.getCollider())) {
+                    if (player.health > 0) {
+                        player.health -= 1;
+                        notifyPlayerDamageHaptics();
+                    }
+                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    break;
+                }
+            }
+        }
+
+        if (player.invincibilityTimer <= 0.0f) {
+            for (const auto& b : bosses) {
+                if (!b.active || !b.activated) continue;
+                if (playerRect.intersects(b.getCollider())) {
                     if (player.health > 0) {
                         player.health -= 1;
                         notifyPlayerDamageHaptics();
@@ -976,6 +1039,192 @@ void Game::checkPortalCollisions() {
 #endif
 }
 
+void Game::updateSummonerBoss(BossEnemy& boss, float dt) {
+    if (boss.type != BossType::SUMMONER) {
+        return;
+    }
+    if (boss.summonerState == BossState::Summoning) {
+        boss.stateTimer -= dt;
+        const float spawnByTimer =
+            kSummonerSummonSeconds - kSummonerEnemySpawnAfterSeconds;
+        if (!boss.summonerSpawnedThisPhase && boss.stateTimer <= spawnByTimer) {
+            boss.summonerSpawnedThisPhase = true;
+#ifdef PLATFORM_PICO
+            RangedEnemy* spawned = rangedEnemies.allocate();
+            if (spawned) {
+                Vec2 spawnPos = boss.position;
+                spawnPos.x += TO_FIXED(14.0f);
+                spawnPos.y += TO_FIXED(-10.0f);
+                *spawned = RangedEnemy(spawnPos, true);
+            }
+#else
+            {
+                Vec2 spawnPos = boss.position;
+                spawnPos.x += TO_FIXED(14.0f);
+                spawnPos.y += TO_FIXED(-10.0f);
+                rangedEnemies.push_back(RangedEnemy(spawnPos, true));
+            }
+#endif
+        }
+        if (boss.stateTimer > 0.0f) {
+            return;
+        }
+        boss.stateTimer = 0.0f;
+        boss.currentWaypoint = (boss.currentWaypoint + 1) % 8;
+        boss.summonerState = BossState::Moving;
+        boss.summonerSpawnedThisPhase = false;
+        return;
+    }
+
+    const Vec2& target = kSummonerWaypoints[boss.currentWaypoint % 8];
+    float px = fixedToFloat(boss.position.x);
+    float py = fixedToFloat(boss.position.y);
+    float tx = fixedToFloat(target.x);
+    float ty = fixedToFloat(target.y);
+    float dx = tx - px;
+    float dy = ty - py;
+    float distSq = dx * dx + dy * dy;
+    const float thresh = kSummonerWaypointArrivePx;
+    if (distSq <= thresh * thresh) {
+        boss.summonerState = BossState::Summoning;
+        boss.stateTimer = kSummonerSummonSeconds;
+        boss.summonerSpawnedThisPhase = false;
+        return;
+    }
+    float len = std::sqrt(distSq);
+    if (len < 1e-4f) {
+        return;
+    }
+    float step = kSummonerMoveSpeed * dt;
+    if (step >= len) {
+        boss.position = target;
+    } else {
+        px += (dx / len) * step;
+        py += (dy / len) * step;
+        boss.position = Vec2(px, py);
+    }
+}
+
+void Game::rebuildArenaWallsFromActivatedBosses() {
+    arenaWalls.clear();
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) {
+            continue;
+        }
+        BossEnemy& b = bosses[i];
+        if (!b.active || !b.activated) {
+            continue;
+        }
+        Rect w[4];
+        b.computeArenaWalls(w);
+        for (int k = 0; k < 4; k++) {
+            Rect* slot = arenaWalls.allocate();
+            if (!slot) {
+                return;
+            }
+            *slot = w[k];
+        }
+    }
+#else
+    for (auto& b : bosses) {
+        if (!b.active || !b.activated) {
+            continue;
+        }
+        Rect w[4];
+        b.computeArenaWalls(w);
+        for (int k = 0; k < 4; k++) {
+            arenaWalls.push_back(w[k]);
+        }
+    }
+#endif
+}
+
+void Game::resolveArenaWallsForPlayer() {
+#ifdef PLATFORM_PICO
+    Rect arenaBuf[8];
+    size_t an = 0;
+    for (size_t i = 0; i < arenaWalls.size(); i++) {
+        if (arenaWalls.isActive(i) && an < 8) {
+            arenaBuf[an++] = arenaWalls[i];
+        }
+    }
+    collision.resolveArenaWalls(player, arenaBuf, an);
+#else
+    collision.resolveArenaWalls(player, arenaWalls.data(), arenaWalls.size());
+#endif
+}
+
+void Game::renderBossHealthBar() {
+    const BossEnemy* barBoss = nullptr;
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) {
+            continue;
+        }
+        if (bosses[i].active && bosses[i].activated) {
+            barBoss = &bosses[i];
+            break;
+        }
+    }
+#else
+    for (const auto& b : bosses) {
+        if (b.active && b.activated) {
+            barBoss = &b;
+            break;
+        }
+    }
+#endif
+    if (!barBoss) {
+        return;
+    }
+
+    const int sw = renderer->getScreenWidth();
+    const int sh = renderer->getScreenHeight();
+    const int barW = (sw * 3) / 4;
+    const int barH = 14;
+    const int marginBottom = 8;
+#ifdef PLATFORM_PICO
+    constexpr int kBossNameScale = 1;
+    const int labelSpace = 10;
+#else
+    const int labelSpace = 18;
+#endif
+    const int barY = sh - marginBottom - barH;
+    const int barX = (sw - barW) / 2;
+
+    const char* name = "Sean Speziale";
+#ifdef PLATFORM_PICO
+    const int nameW = renderer->measureTextWidthScaled(name, kBossNameScale);
+    renderer->drawTextScaled(name, (sw - nameW) / 2, barY - labelSpace, Color(255, 255, 255), kBossNameScale);
+#else
+    const int nameW = renderer->measureTextWidth(name);
+    renderer->drawText(name, (sw - nameW) / 2, barY - labelSpace, Color(255, 255, 255));
+#endif
+
+    Rect bg(static_cast<float>(barX), static_cast<float>(barY), static_cast<float>(barW),
+            static_cast<float>(barH));
+    renderer->drawRect(bg, Color(24, 24, 24), true);
+    renderer->drawRect(bg, Color(0, 0, 0), false);
+
+    float pct = 0.0f;
+    if (barBoss->maxHealth > 0) {
+        pct = static_cast<float>(barBoss->health) / static_cast<float>(barBoss->maxHealth);
+    }
+    if (pct < 0.0f) {
+        pct = 0.0f;
+    }
+    if (pct > 1.0f) {
+        pct = 1.0f;
+    }
+    const int fillW = static_cast<int>(static_cast<float>(barW) * pct);
+    if (fillW > 0) {
+        Rect fill(static_cast<float>(barX), static_cast<float>(barY), static_cast<float>(fillW),
+                  static_cast<float>(barH));
+        renderer->drawRect(fill, Color(255, 0, 0), true);
+    }
+}
+
 bool Game::hasAliveBoss() const {
 #ifdef PLATFORM_PICO
     for (size_t i = 0; i < bosses.size(); i++) {
@@ -1327,6 +1576,8 @@ void Game::renderPlayingWorld() {
         renderer->drawText(bossStatusText.c_str(), 28, 48, Color(255, 255, 255));
 #endif
     }
+
+    renderBossHealthBar();
 }
 
 void Game::renderMainMenu() {

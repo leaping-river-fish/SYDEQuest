@@ -4,11 +4,16 @@
 class Level;
 class Player;
 
-/** Boss archetypes — extend AI in BossEnemy.cpp via updateSummoner / updateLaser / updateBulletHell. */
+/** Boss archetypes — extend AI in BossEnemy.cpp via updateLaser / updateBulletHell; SUMMONER is driven from Game. */
 enum class BossType {
     SUMMONER,
     LASER,
     BULLET_HELL
+};
+
+enum class BossState {
+    Moving,
+    Summoning
 };
 
 class BossEnemy {
@@ -41,9 +46,17 @@ public:
 
     Vec2 position;
     int health;
+    int maxHealth;
     bool active;
     bool activated;
     BossType type;
+
+    /** Summoner AI only; ignored for other boss types. */
+    BossState summonerState;
+    int currentWaypoint;
+    float stateTimer;
+    /** True after the ranged spawn for the current summoning phase (reset when entering Summoning). */
+    bool summonerSpawnedThisPhase;
 
     BossEnemy();
     BossEnemy(Vec2 spawn, BossType bossType);
@@ -56,7 +69,6 @@ public:
     void computeArenaWalls(Rect out[4]) const;
 
 private:
-    void updateSummoner(float deltaTime, const Level& level, const Player& player);
     void updateLaser(float deltaTime, const Level& level, const Player& player);
     void updateBulletHell(float deltaTime, const Level& level, const Player& player);
 };

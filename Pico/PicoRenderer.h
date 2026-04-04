@@ -29,6 +29,8 @@ public:
                   int cameraOffsetX, int cameraOffsetY) override;
     void drawText(const char* text, int x, int y, Color color) override;
     int measureTextWidth(const char* text) const override;
+    void drawTextScaled(const char* text, int x, int y, Color color, int glyphScalePixels) override;
+    int measureTextWidthScaled(const char* text, int glyphScalePixels) const override;
 
     int loadTexture(const char* path) override;
     
