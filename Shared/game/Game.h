@@ -4,6 +4,7 @@
 #include "projectile/Projectile.h"
 #include "enemy/BasicEnemy.h"
 #include "enemy/RangedEnemy.h"
+#include "enemy/BossEnemy.h"
 #include "enemy/EnemyProjectile.h"
 #include "healthpack/HealthPack.h"
 #include "objective/Objective.h"
@@ -110,6 +111,8 @@ private:
     EntityPool<EnemyProjectile, 30> enemyProjectiles;
     EntityPool<HealthPack, 1> healthPacks;
     EntityPool<Objective, 1> objectives;
+    EntityPool<BossEnemy, 3> bosses;
+    EntityPool<Rect, 8> arenaWalls;
     
     struct EntityState {
         bool isActive;
@@ -126,6 +129,8 @@ private:
     std::vector<EnemyProjectile> enemyProjectiles;
     std::vector<HealthPack> healthPacks;
     std::vector<Objective> objectives;
+    std::vector<BossEnemy> bosses;
+    std::vector<Rect> arenaWalls;
     
     static constexpr float DEACTIVATION_DISTANCE = 500.0f;
 #endif
@@ -162,8 +167,11 @@ private:
     
     // Objective tracking
     bool levelObjectiveCollected;
+    /** True if current level file defines at least one boss spawn (drives boss HUD). */
+    bool levelHasBoss;
     
     void checkPortalCollisions();
+    bool hasAliveBoss() const;
     int getObjectiveSpritesheet(ObjectiveType type) const;
 
 #ifdef PLATFORM_PICO

@@ -29,6 +29,11 @@ int PicoInput::buttonToBit(Button button) const {
 }
 
 void PicoInput::update() {
+    // Re-assert GP14 as SIO input + pull-up every frame so nothing else can leave it misconfigured.
+    gpio_init(PIN_FIRE);
+    gpio_set_dir(PIN_FIRE, GPIO_IN);
+    gpio_pull_up(PIN_FIRE);
+
     previousState = currentState;
     currentState = 0;
 

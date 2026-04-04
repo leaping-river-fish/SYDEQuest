@@ -67,4 +67,6 @@ const LevelMetadata level1_metadata = {
     .portalCount = 1,
     .objectives = nullptr,
     .objectiveCount = 0,
+    .bosses = nullptr,
+    .bossCount = 0,
 };

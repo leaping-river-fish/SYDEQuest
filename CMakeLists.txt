@@ -48,6 +48,7 @@ set(SHARED_SOURCES
     Shared/game/projectile/Projectile.cpp
     Shared/game/enemy/BasicEnemy.cpp
     Shared/game/enemy/RangedEnemy.cpp
+    Shared/game/enemy/BossEnemy.cpp
     Shared/game/enemy/EnemyProjectile.cpp
     Shared/game/healthpack/HealthPack.cpp
     Shared/game/objective/Objective.cpp

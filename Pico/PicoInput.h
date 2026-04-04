@@ -4,6 +4,9 @@
 
 class PicoInput : public IInput {
 public:
+    /** GP14 — fire button (active low, internal pull-up). */
+    static constexpr int kFireGpioPin = 14;
+
     PicoInput();
 
     void update() override;
@@ -17,8 +20,8 @@ private:
 
     static constexpr int PIN_JOY_X = 26;
     static constexpr int PIN_JOY_Y = 27;
-    static constexpr int PIN_FIRE = 6;
-    static constexpr int PIN_PAUSE = 7;
+    static constexpr int PIN_FIRE = kFireGpioPin;
+    static constexpr int PIN_PAUSE = 6;
 
     /** Wider neutral band (800–3200) reduces spurious Jump/Down from ADC noise at rest. */
     static constexpr uint16_t LOW_THRESHOLD = 800;

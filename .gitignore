@@ -10,8 +10,8 @@ build-pc/
 *.bin
 *.o
 
-build-pico/
-*.uf2
-*.elf
-*.bin
-*.o
+# build-pico/
+# *.uf2
+# *.elf
+# *.bin
+# *.o

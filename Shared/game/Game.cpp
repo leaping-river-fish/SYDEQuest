@@ -4,6 +4,7 @@
 #include "../core/IHaptics.h"
 #include "../core/ITimer.h"
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <cstdio>
 
@@ -14,13 +15,31 @@
 #ifdef PLATFORM_PICO
 #include "../../Pico/assets/level1_data.h"
 #include "../../Pico/assets/level2_data.h"
+#include "../../Pico/assets/level3_data.h"
 #endif
+
+namespace {
+// Set to true to force bosses active/visible without entering activation range (debug only).
+constexpr bool kDebugForceBossActivated = false;
+}  // namespace
 
 #ifndef PLATFORM_PICO
 inline float distanceSquared(const Vec2& a, const Vec2& b) {
     float dx = a.x - b.x;
     float dy = a.y - b.y;
     return dx * dx + dy * dy;
+}
+#else
+/** Squared distance in fixed units (same scale as FIXED_MUL); int64 avoids int32 overflow when far apart. */
+inline bool playerWithinBossActivationSq(const Vec2& playerPos, const Vec2& bossTopLeft) {
+    fixed_t bcx = bossTopLeft.x + FIXED_DIV(BossEnemy::WIDTH, TO_FIXED(2.0f));
+    fixed_t bcy = bossTopLeft.y + FIXED_DIV(BossEnemy::HEIGHT, TO_FIXED(2.0f));
+    std::int64_t dx = static_cast<std::int64_t>(playerPos.x) - static_cast<std::int64_t>(bcx);
+    std::int64_t dy = static_cast<std::int64_t>(playerPos.y) - static_cast<std::int64_t>(bcy);
+    std::int64_t d2 = ((dx * dx) >> FIXED_SHIFT) + ((dy * dy) >> FIXED_SHIFT);
+    std::int64_t r = static_cast<std::int64_t>(TO_FIXED(BossEnemy::BOSS_ACTIVATION_DISTANCE));
+    std::int64_t r2 = (r * r) >> FIXED_SHIFT;
+    return d2 < r2;
 }
 #endif
 
@@ -48,7 +67,8 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       hpUIAnimTimer(0.0f),
       portalFrame(0),
       portalAnimTimer(0.0f),
-      levelObjectiveCollected(false)
+      levelObjectiveCollected(false),
+      levelHasBoss(false)
 {
     currentLevelName[0] = '\0';
 }
@@ -92,6 +112,8 @@ void Game::resetAndSpawnEntitiesPico() {
     enemyProjectiles.clear();
     healthPacks.clear();
     objectives.clear();
+    bosses.clear();
+    arenaWalls.clear();
 
     for (size_t i = 0; i < Level::MAX_HEALTH_PACKS; i++) {
         healthPackStates[i].isActive = false;
@@ -140,6 +162,23 @@ void Game::resetAndSpawnEntitiesPico() {
         }
     }
 
+    const Vec2* bossSpawnPoints = level.getBossSpawns();
+    const BossType* bossTypesData = level.getBossTypes();
+    uint8_t bossCount = level.getBossSpawnCount();
+    levelHasBoss = bossCount > 0;
+    for (uint8_t i = 0; i < bossCount; i++) {
+        BossEnemy* b = bosses.allocate();
+        if (b) {
+            *b = BossEnemy(bossSpawnPoints[i], bossTypesData[i]);
+        }
+    }
+    if (kDebugForceBossActivated) {
+        for (size_t i = 0; i < bosses.size(); i++) {
+            if (!bosses.isActive(i)) continue;
+            bosses[i].activated = true;
+        }
+    }
+
     camera.follow(player, level);
 }
 
@@ -158,6 +197,8 @@ bool Game::loadLevel(const char* levelName) {
     bool ok = false;
     if (std::strstr(levelName, "Level2") != nullptr) {
         ok = level.loadFromBinaryData(level2_tiles, level2_width, level2_height, &level2_metadata);
+    } else if (std::strstr(levelName, "Level3") != nullptr) {
+        ok = level.loadFromBinaryData(level3_tiles, level3_width, level3_height, &level3_metadata);
     } else {
         ok = level.loadFromBinaryData(level1_tiles, level1_width, level1_height, &level1_metadata);
     }
@@ -186,6 +227,8 @@ bool Game::loadLevel(const char* levelName) {
     enemyProjectiles.clear();
     healthPacks.clear();
     objectives.clear();
+    bosses.clear();
+    arenaWalls.clear();
 #endif
     
     // Spawn basic enemies from level data
@@ -209,6 +252,19 @@ bool Game::loadLevel(const char* levelName) {
     const std::vector<std::pair<Vec2, ObjectiveType>>& objectiveSpawnPoints = level.getObjectiveSpawns();
     for (const auto& [spawnPos, type] : objectiveSpawnPoints) {
         objectives.push_back(Objective(spawnPos, type));
+    }
+
+    const std::vector<Vec2>& bossSpawnPoints = level.getBossSpawns();
+    const std::vector<BossType>& bossTypesVec = level.getBossTypes();
+    levelHasBoss = !bossSpawnPoints.empty();
+
+    for (size_t i = 0; i < bossSpawnPoints.size(); i++) {
+        bosses.push_back(BossEnemy(bossSpawnPoints[i], bossTypesVec[i]));
+    }
+    if (kDebugForceBossActivated) {
+        for (auto& boss : bosses) {
+            boss.activated = true;
+        }
     }
 #endif
 
@@ -251,6 +307,62 @@ void Game::update() {
     player.position.y += player.velocity.y * dt;
 #endif
     collision.resolveVertical(player, level, prevY);
+
+    // Boss activation (before arena collision); AI runs later after enemies/projectiles.
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) continue;
+        BossEnemy& boss = bosses[i];
+        if (!boss.active || boss.activated) continue;
+        if (playerWithinBossActivationSq(player.position, boss.position)) {
+            boss.activated = true;
+            arenaWalls.clear();
+            Rect w[4];
+            boss.computeArenaWalls(w);
+            for (int k = 0; k < 4; k++) {
+                Rect* slot = arenaWalls.allocate();
+                if (slot) {
+                    *slot = w[k];
+                }
+            }
+        }
+    }
+#else
+    {
+        const float bossActR = BossEnemy::BOSS_ACTIVATION_DISTANCE;
+        const float bossActR2 = bossActR * bossActR;
+        for (auto& boss : bosses) {
+            if (!boss.active || boss.activated) continue;
+            float cx = boss.position.x + BossEnemy::WIDTH * 0.5f;
+            float cy = boss.position.y + BossEnemy::HEIGHT * 0.5f;
+            Vec2 bc(cx, cy);
+            if (distanceSquared(player.position, bc) < bossActR2) {
+                boss.activated = true;
+                arenaWalls.clear();
+                Rect w[4];
+                boss.computeArenaWalls(w);
+                for (int k = 0; k < 4; k++) {
+                    arenaWalls.push_back(w[k]);
+                }
+            }
+        }
+    }
+#endif
+
+#ifdef PLATFORM_PICO
+    {
+        Rect arenaBuf[8];
+        size_t an = 0;
+        for (size_t i = 0; i < arenaWalls.size(); i++) {
+            if (arenaWalls.isActive(i) && an < 8) {
+                arenaBuf[an++] = arenaWalls[i];
+            }
+        }
+        collision.resolveArenaWalls(player, arenaBuf, an);
+    }
+#else
+    collision.resolveArenaWalls(player, arenaWalls.data(), arenaWalls.size());
+#endif
     
     // Update animation/state
     player.update(dt);
@@ -338,6 +450,20 @@ void Game::update() {
         if (distSq < DEACTIVATION_DISTANCE * DEACTIVATION_DISTANCE) {
             enemy.update(dt, level, player, enemyProjectiles);
         }
+    }
+#endif
+
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) continue;
+        BossEnemy& b = bosses[i];
+        if (!b.active || !b.activated) continue;
+        b.update(dt, level, player);
+    }
+#else
+    for (auto& boss : bosses) {
+        if (!boss.active || !boss.activated) continue;
+        boss.update(dt, level, player);
     }
 #endif
     
@@ -505,6 +631,33 @@ void Game::update() {
         }
     }
 #endif
+
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < projectiles.size(); i++) {
+        if (!projectiles.isActive(i)) continue;
+        for (size_t j = 0; j < bosses.size(); j++) {
+            if (!bosses.isActive(j)) continue;
+            BossEnemy& b = bosses[j];
+            if (!b.active || !b.activated) continue;
+            if (projectiles[i].getCollider().intersects(b.getCollider())) {
+                projectiles[i].shouldDestroy = true;
+                b.takeDamage(1);
+                break;
+            }
+        }
+    }
+#else
+    for (auto& projectile : projectiles) {
+        for (auto& b : bosses) {
+            if (!b.active || !b.activated) continue;
+            if (projectile.getCollider().intersects(b.getCollider())) {
+                projectile.shouldDestroy = true;
+                b.takeDamage(1);
+                break;
+            }
+        }
+    }
+#endif
     
     // Check enemy projectile vs player collisions
 #ifdef PLATFORM_PICO
@@ -589,6 +742,13 @@ void Game::update() {
             rangedEnemies.free(i);
         }
     }
+    
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (bosses.isActive(i) && !bosses[i].active) {
+            arenaWalls.clear();
+            bosses.free(i);
+        }
+    }
 #else
     projectiles.erase(
         std::remove_if(projectiles.begin(), projectiles.end(),
@@ -613,6 +773,24 @@ void Game::update() {
             [](const RangedEnemy& e) { return e.health <= 0; }),
         rangedEnemies.end()
     );
+    
+    {
+        bool removedBoss = false;
+        bosses.erase(
+            std::remove_if(bosses.begin(), bosses.end(),
+                [&removedBoss](BossEnemy& b) {
+                    if (!b.active) {
+                        removedBoss = true;
+                        return true;
+                    }
+                    return false;
+                }),
+            bosses.end()
+        );
+        if (removedBoss) {
+            arenaWalls.clear();
+        }
+    }
 #endif
     
     // Camera follow
@@ -651,6 +829,9 @@ void Game::checkPortalCollisions() {
             if (hasObjectives && !levelObjectiveCollected) {
                 return;
             }
+            if (hasAliveBoss()) {
+                return;
+            }
             loadLevel(portals[i].targetLevel);
             break;
         }
@@ -663,10 +844,31 @@ void Game::checkPortalCollisions() {
             if (!objectives.empty() && !levelObjectiveCollected) {
                 return;
             }
+            if (hasAliveBoss()) {
+                return;
+            }
             loadLevel(portal.targetLevel);
             break;
         }
     }
+#endif
+}
+
+bool Game::hasAliveBoss() const {
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (bosses.isActive(i) && bosses[i].active) {
+            return true;
+        }
+    }
+    return false;
+#else
+    for (const auto& b : bosses) {
+        if (b.active) {
+            return true;
+        }
+    }
+    return false;
 #endif
 }
 
@@ -761,6 +963,15 @@ void Game::render() {
             renderer->drawRect(dstRect, Color(255, 128, 0), true);
         }
     }
+
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) continue;
+        if (!bosses[i].active || !bosses[i].activated) continue;
+        Rect dstRect = bosses[i].getCollider();
+        dstRect.x -= TO_FIXED(camX);
+        dstRect.y -= TO_FIXED(camY);
+        renderer->drawRect(dstRect, Color(255, 0, 255), true);
+    }
 #else
     for (const auto& enemy : basicEnemies) {
         Rect dstRect = enemy.getCollider();
@@ -784,6 +995,14 @@ void Game::render() {
         } else {
             renderer->drawRect(dstRect, Color(255, 128, 0), true);
         }
+    }
+
+    for (const auto& boss : bosses) {
+        if (!boss.active || !boss.activated) continue;
+        Rect dstRect = boss.getCollider();
+        dstRect.x -= camX;
+        dstRect.y -= camY;
+        renderer->drawRect(dstRect, Color(255, 0, 255), true);
     }
 #endif
     
@@ -964,7 +1183,19 @@ void Game::render() {
         renderer->drawText(statusText.c_str(), 28, 30, Color(255, 255, 255));
     #endif
     }
-    
+
+    if (levelHasBoss) {
+        Rect bossIconDst(8.0f, 47.0f, 16.0f, 16.0f);
+        renderer->drawRect(bossIconDst, Color(255, 0, 0), true);
+#ifdef PLATFORM_PICO
+        const char* bossStatusText = hasAliveBoss() ? "0/1" : "1/1";
+        renderer->drawText(bossStatusText, 28, 47, Color(255, 255, 255));
+#else
+        std::string bossStatusText = hasAliveBoss() ? "0/1" : "1/1";
+        renderer->drawText(bossStatusText.c_str(), 28, 48, Color(255, 255, 255));
+#endif
+    }
+
     renderer->endFrame();
 }
 

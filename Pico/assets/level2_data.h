@@ -128,7 +128,7 @@ const SpawnData level2_healthPacks[] = {
 };
 
 const PortalData level2_portals[] = {
-    {80.0f, 128.0f, 32.0f, 32.0f, 0, 48.0f, 464.0f},
+    {80.0f, 128.0f, 32.0f, 32.0f, 2, 48.0f, 320.0f},
 };
 
 const ObjectiveSpawnData level2_objectives[] = {
@@ -145,4 +145,6 @@ const LevelMetadata level2_metadata = {
     .portalCount = 1,
     .objectives = level2_objectives,
     .objectiveCount = 1,
+    .bosses = nullptr,
+    .bossCount = 0,
 };

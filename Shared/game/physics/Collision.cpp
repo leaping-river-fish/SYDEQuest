@@ -175,6 +175,62 @@ void Collision::resolveHorizontal(Player& player, const Level& level) {
     }
 }
 
+void Collision::resolveArenaWalls(Player& player, const Rect* walls, size_t count) {
+    if (!walls || count == 0) {
+        return;
+    }
+    for (int iter = 0; iter < 2; ++iter) {
+        for (size_t wi = 0; wi < count; ++wi) {
+            Rect r = player.getCollider();
+            const Rect& w = walls[wi];
+            if (!r.intersects(w)) {
+                continue;
+            }
+            fixed_t penL = (r.x + r.width) - w.x;
+            fixed_t penR = (w.x + w.width) - r.x;
+            fixed_t penT = (r.y + r.height) - w.y;
+            fixed_t penB = (w.y + w.height) - r.y;
+            fixed_t m = penL;
+            int axis = 0;
+            if (penR < m) {
+                m = penR;
+                axis = 1;
+            }
+            if (penT < m) {
+                m = penT;
+                axis = 2;
+            }
+            if (penB < m) {
+                m = penB;
+                axis = 3;
+            }
+            if (m <= 0) {
+                continue;
+            }
+            switch (axis) {
+                case 0:
+                    player.position.x -= m;
+                    player.velocity.x = 0;
+                    break;
+                case 1:
+                    player.position.x += m;
+                    player.velocity.x = 0;
+                    break;
+                case 2:
+                    player.position.y -= m;
+                    player.velocity.y = 0;
+                    break;
+                case 3:
+                    player.position.y += m;
+                    player.velocity.y = 0;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+}
+
 bool Collision::checkProjectileTileCollision(const Projectile& projectile, const Level& level) {
     Rect collider = projectile.getCollider();
     int tileSize = level.getTileSize();

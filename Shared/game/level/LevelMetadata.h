@@ -15,6 +15,12 @@ enum class LevelObjectiveType : uint8_t {
     PICO = 5
 };
 
+enum class LevelBossType : uint8_t {
+    SUMMONER = 0,
+    LASER = 1,
+    BULLET_HELL = 2
+};
+
 struct SpawnData {
     float x;
     float y;
@@ -42,6 +48,12 @@ struct ObjectiveSpawnData {
     LevelObjectiveType type;
 };
 
+struct BossSpawnData {
+    float x;
+    float y;
+    LevelBossType type;
+};
+
 struct LevelMetadata {
     SpawnData spawn;
     
@@ -56,4 +68,7 @@ struct LevelMetadata {
     
     const ObjectiveSpawnData* objectives;
     uint8_t objectiveCount;
+    
+    const BossSpawnData* bosses;
+    uint8_t bossCount;
 };

@@ -1,5 +1,6 @@
 #include "Level.h"
 #include "../objective/Objective.h"
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -7,6 +8,48 @@
 #ifdef PLATFORM_PICO
     #include "LevelMetadata.h"
 #endif
+
+namespace {
+
+void trimTrailingWhitespace(char* s) {
+    size_t n = strlen(s);
+    while (n > 0 && std::isspace(static_cast<unsigned char>(s[n - 1]))) {
+        s[--n] = '\0';
+    }
+}
+
+bool parseBossTypeFromString(const char* typeStr, BossType& out) {
+    char buf[64];
+    strncpy(buf, typeStr, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    trimTrailingWhitespace(buf);
+    if (strcmp(buf, "SUMMONER") == 0) {
+        out = BossType::SUMMONER;
+        return true;
+    }
+    if (strcmp(buf, "LASER") == 0) {
+        out = BossType::LASER;
+        return true;
+    }
+    if (strcmp(buf, "BULLET_HELL") == 0) {
+        out = BossType::BULLET_HELL;
+        return true;
+    }
+    return false;
+}
+
+#ifdef PLATFORM_PICO
+BossType bossTypeFromLevelBossType(LevelBossType t) {
+    switch (t) {
+        case LevelBossType::SUMMONER: return BossType::SUMMONER;
+        case LevelBossType::LASER: return BossType::LASER;
+        case LevelBossType::BULLET_HELL: return BossType::BULLET_HELL;
+        default: return BossType::SUMMONER;
+    }
+}
+#endif
+
+}  // namespace
 
 Level::Level() : width(0), height(0), spawnPoint(100, 100) {
 #ifndef PLATFORM_PICO
@@ -26,6 +69,7 @@ void Level::unload() {
     rangedEnemySpawnCount = 0;
     healthPackSpawnCount = 0;
     objectiveSpawnCount = 0;
+    bossSpawnCount = 0;
 #else
     if (tileIds != nullptr) {
         delete[] tileIds;
@@ -37,6 +81,8 @@ void Level::unload() {
     rangedEnemySpawns.clear();
     healthPackSpawns.clear();
     objectiveSpawns.clear();
+    bossSpawns.clear();
+    bossTypes.clear();
 #endif
     width = 0;
     height = 0;
@@ -75,6 +121,34 @@ bool Level::isPlatform(int tileX, int tileY) const {
 
 bool Level::loadFromFile(const char* filename) {
     FILE* file = fopen(filename, "r");
+    if (!file) {
+        // If cwd is project root, "../levels/Foo.csv" points outside the repo. Retry using the
+        // path from "levels/" so "levels/Foo.csv" resolves next to the executable / cwd.
+        const char* levels = strstr(filename, "levels/");
+        if (levels) {
+            file = fopen(levels, "r");
+        }
+    }
+#ifndef PLATFORM_PICO
+    // VS/CMake often run the binary from build/Release, build/Debug, or build/x64/Debug.
+    // Then "../levels/" and "levels/" miss the repo's levels/ folder; walk up to project root.
+    if (!file) {
+        const char* levels = strstr(filename, "levels/");
+        if (levels) {
+            char buf[256];
+            static const char* const rel[] = {"../../%s", "../../../%s"};
+            for (const char* fmt : rel) {
+                int n = snprintf(buf, sizeof(buf), fmt, levels);
+                if (n > 0 && n < static_cast<int>(sizeof(buf))) {
+                    file = fopen(buf, "r");
+                    if (file) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+#endif
     if (!file) {
         return false;
     }
@@ -231,7 +305,7 @@ bool Level::loadFromFile(const char* filename) {
         } else if (strncmp(line, "OBJECTIVE ", 10) == 0) {
             float ox, oy;
             char typeStr[32];
-            if (sscanf(line + 10, "%f %f %s", &ox, &oy, typeStr) == 3) {
+            if (sscanf(line + 10, "%f %f %31s", &ox, &oy, typeStr) == 3) {
                 ObjectiveType type;
                 if (strcmp(typeStr, "CHARGER") == 0) {
                     type = ObjectiveType::CHARGER;
@@ -258,11 +332,29 @@ bool Level::loadFromFile(const char* filename) {
                 objectiveSpawns.push_back(std::make_pair(Vec2(ox, oy), type));
 #endif
             }
+        } else if (strncmp(line, "BOSS ", 5) == 0) {
+            float bx, by;
+            char bossTypeStr[32];
+            BossType btype;
+            if (sscanf(line + 5, "%f %f %31s", &bx, &by, bossTypeStr) == 3) {
+                if (!parseBossTypeFromString(bossTypeStr, btype)) {
+                    continue;
+                }
+#ifdef PLATFORM_PICO
+                if (bossSpawnCount < MAX_BOSS_SPAWNS) {
+                    bossSpawns[bossSpawnCount] = Vec2(bx, by);
+                    bossTypes[bossSpawnCount] = btype;
+                    bossSpawnCount++;
+                }
+#else
+                bossSpawns.push_back(Vec2(bx, by));
+                bossTypes.push_back(btype);
+#endif
+            }
         }
     }
     
     fclose(file);
-    printf("Loaded level: %d x %d\n", width, height);
     return true;
 }
 
@@ -397,7 +489,7 @@ bool Level::loadFromData(const char* csvData) {
             } else if (strncmp(line, "OBJECTIVE ", 10) == 0) {
                 float ox, oy;
                 char typeStr[32];
-                if (sscanf(line + 10, "%f %f %s", &ox, &oy, typeStr) == 3) {
+                if (sscanf(line + 10, "%f %f %31s", &ox, &oy, typeStr) == 3) {
                     ObjectiveType type;
                     if (strcmp(typeStr, "CHARGER") == 0) {
                         type = ObjectiveType::CHARGER;
@@ -420,13 +512,26 @@ bool Level::loadFromData(const char* csvData) {
                         objectiveSpawnCount++;
                     }
                 }
+            } else if (strncmp(line, "BOSS ", 5) == 0) {
+                float bx, by;
+                char bossTypeStr[32];
+                BossType btype;
+                if (sscanf(line + 5, "%f %f %31s", &bx, &by, bossTypeStr) == 3) {
+                    if (!parseBossTypeFromString(bossTypeStr, btype)) {
+                        continue;
+                    }
+                    if (bossSpawnCount < MAX_BOSS_SPAWNS) {
+                        bossSpawns[bossSpawnCount] = Vec2(bx, by);
+                        bossTypes[bossSpawnCount] = btype;
+                        bossSpawnCount++;
+                    }
+                }
             }
         }
         
         if (*ptr == '\n') ptr++;
     }
     
-    printf("Loaded level: %d x %d\n", width, height);
     return true;
 }
 
@@ -485,6 +590,8 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
             strncpy(portal.targetLevel, "../levels/Level1.csv", sizeof(portal.targetLevel) - 1);
         } else if (pd.targetLevelId == 1) {
             strncpy(portal.targetLevel, "../levels/Level2.csv", sizeof(portal.targetLevel) - 1);
+        } else if (pd.targetLevelId == 2) {
+            strncpy(portal.targetLevel, "../levels/Level3.csv", sizeof(portal.targetLevel) - 1);
         }
         portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
         
@@ -513,7 +620,15 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
         objectiveSpawnCount++;
     }
     
-    printf("Loaded level: %d x %d\n", width, height);
+    if (metadata->bosses && metadata->bossCount > 0) {
+        for (uint8_t i = 0; i < metadata->bossCount && i < MAX_BOSS_SPAWNS; i++) {
+            const BossSpawnData& b = metadata->bosses[i];
+            bossSpawns[bossSpawnCount] = Vec2(b.x, b.y);
+            bossTypes[bossSpawnCount] = bossTypeFromLevelBossType(b.type);
+            bossSpawnCount++;
+        }
+    }
+    
     return true;
 }
 #endif

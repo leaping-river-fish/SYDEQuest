@@ -5,6 +5,7 @@ Regenerate embedded Pico headers after editing a level CSV, then diff to verify 
 
     python tools/csv_to_binary_header.py levels/Level1.csv Pico/assets/level1_data.h level1
     python tools/csv_to_binary_header.py levels/Level2.csv Pico/assets/level2_data.h level2
+    python tools/csv_to_binary_header.py levels/Level3.csv Pico/assets/level3_data.h level3
 
 Use ``git diff Pico/assets/level*_data.h`` (or your VCS) to review changes before committing.
 """
@@ -64,12 +65,15 @@ def parse_metadata(metadata_lines, level_name):
     health_packs = []
     portals = []
     objectives = []
+    bosses = []
 
     level_id_map = {
         "../levels/Level1.csv": 0,
         "../levels/Level2.csv": 1,
+        "../levels/Level3.csv": 2,
         "Level1.csv": 0,
         "Level2.csv": 1,
+        "Level3.csv": 2,
     }
 
     for line in metadata_lines:
@@ -128,12 +132,20 @@ def parse_metadata(metadata_lines, level_name):
                     {"x": float(parts[1]), "y": float(parts[2]), "type": parts[3]}
                 )
 
+        elif line.startswith("BOSS "):
+            parts = line.split()
+            if len(parts) >= 4:
+                bosses.append(
+                    {"x": float(parts[1]), "y": float(parts[2]), "type": parts[3]}
+                )
+
     return {
         "spawn": spawn if spawn else {"x": 100.0, "y": 100.0},
         "enemies": enemies,
         "health_packs": health_packs,
         "portals": portals,
         "objectives": objectives,
+        "bosses": bosses,
     }
 
 
@@ -174,6 +186,14 @@ def generate_c_structs(metadata, level_name):
         lines.append("};")
         lines.append("")
 
+    if metadata["bosses"]:
+        lines.append(f"const BossSpawnData {level_name}_bosses[] = {{")
+        for b in metadata["bosses"]:
+            b_type = f"LevelBossType::{b['type']}"
+            lines.append(f"    {{{b['x']}f, {b['y']}f, {b_type}}},")
+        lines.append("};")
+        lines.append("")
+
     lines.append(f"const LevelMetadata {level_name}_metadata = {{")
     lines.append(f"    .spawn = {{{metadata['spawn']['x']}f, {metadata['spawn']['y']}f}},")
 
@@ -204,6 +224,13 @@ def generate_c_structs(metadata, level_name):
     else:
         lines.append("    .objectives = nullptr,")
         lines.append("    .objectiveCount = 0,")
+
+    if metadata["bosses"]:
+        lines.append(f"    .bosses = {level_name}_bosses,")
+        lines.append(f"    .bossCount = {len(metadata['bosses'])},")
+    else:
+        lines.append("    .bosses = nullptr,")
+        lines.append("    .bossCount = 0,")
 
     lines.append("};")
 
@@ -248,6 +275,7 @@ def csv_to_binary_header(csv_path, output_path, level_name):
     print(f"  - Health packs: {len(metadata['health_packs'])}")
     print(f"  - Portals: {len(metadata['portals'])}")
     print(f"  - Objectives: {len(metadata['objectives'])}")
+    print(f"  - Bosses: {len(metadata['bosses'])}")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "../../core/types.h"
+#include "../enemy/BossEnemy.h"
 
 #ifndef PLATFORM_PICO
     #include <vector>
@@ -40,8 +41,9 @@ public:
     static constexpr int MAX_PORTALS = 1;
     static constexpr int MAX_BASIC_ENEMIES = 20;
     static constexpr int MAX_RANGED_ENEMIES = 20;
-    static constexpr int MAX_HEALTH_PACKS = 1;
+    static constexpr int MAX_HEALTH_PACKS = 2;
     static constexpr int MAX_OBJECTIVES = 1;
+    static constexpr int MAX_BOSS_SPAWNS = 1;
 #endif
 
     Level();
@@ -78,6 +80,9 @@ public:
     const Vec2* getObjectiveSpawns() const { return objectiveSpawns; }
     const ObjectiveType* getObjectiveTypes() const { return objectiveTypes; }
     uint8_t getObjectiveSpawnCount() const { return objectiveSpawnCount; }
+    const Vec2* getBossSpawns() const { return bossSpawns; }
+    const BossType* getBossTypes() const { return bossTypes; }
+    uint8_t getBossSpawnCount() const { return bossSpawnCount; }
 #else
     const std::vector<Portal>& getPortals() const { return portals; }
     const std::vector<Vec2>& getEnemySpawns() const { return enemySpawns; }
@@ -85,6 +90,8 @@ public:
     const std::vector<Vec2>& getRangedEnemySpawns() const { return rangedEnemySpawns; }
     const std::vector<Vec2>& getHealthPackSpawns() const { return healthPackSpawns; }
     const std::vector<std::pair<Vec2, ObjectiveType>>& getObjectiveSpawns() const { return objectiveSpawns; }
+    const std::vector<Vec2>& getBossSpawns() const { return bossSpawns; }
+    const std::vector<BossType>& getBossTypes() const { return bossTypes; }
 #endif
 
 private:
@@ -105,6 +112,9 @@ private:
     Vec2 objectiveSpawns[MAX_OBJECTIVES];
     uint8_t objectiveSpawnCount;
     ObjectiveType objectiveTypes[MAX_OBJECTIVES];
+    Vec2 bossSpawns[MAX_BOSS_SPAWNS];
+    BossType bossTypes[MAX_BOSS_SPAWNS];
+    uint8_t bossSpawnCount;
 #else
     int8_t* tileIds;
     std::vector<Portal> portals;
@@ -113,6 +123,8 @@ private:
     std::vector<Vec2> rangedEnemySpawns;
     std::vector<Vec2> healthPackSpawns;
     std::vector<std::pair<Vec2, ObjectiveType>> objectiveSpawns;
+    std::vector<Vec2> bossSpawns;
+    std::vector<BossType> bossTypes;
 #endif
 
     void loadTestLevel();
