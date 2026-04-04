@@ -110,6 +110,7 @@ elseif(TARGET_PLATFORM STREQUAL "pico")
     
     target_include_directories(platformer PRIVATE 
         Shared
+        Pico
     )
     
     target_compile_definitions(platformer PRIVATE 

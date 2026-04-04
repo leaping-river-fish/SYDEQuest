@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cctype>
 
 #ifndef PLATFORM_PICO
     #include <string>
@@ -21,6 +22,31 @@
 namespace {
 // Set to true to force bosses active/visible without entering activation range (debug only).
 constexpr bool kDebugForceBossActivated = false;
+
+/** Case-insensitive substring (ASCII); needle must be lower-case. */
+bool pathContainsInsensitive(const char* haystack, const char* needleLower) {
+    if (!haystack || !needleLower) {
+        return false;
+    }
+    char buf[96];
+    size_t i = 0;
+    for (; haystack[i] && i < sizeof(buf) - 1; ++i) {
+        buf[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(haystack[i])));
+    }
+    buf[i] = '\0';
+    return std::strstr(buf, needleLower) != nullptr;
+}
+
+bool pointInRect(int px, int py, const Rect& r) {
+#ifdef PLATFORM_PICO
+    const fixed_t fpx = TO_FIXED(static_cast<float>(px));
+    const fixed_t fpy = TO_FIXED(static_cast<float>(py));
+    return fpx >= r.x && fpx < r.x + r.width && fpy >= r.y && fpy < r.y + r.height;
+#else
+    return px >= static_cast<int>(r.x) && px < static_cast<int>(r.x + r.width) &&
+           py >= static_cast<int>(r.y) && py < static_cast<int>(r.y + r.height);
+#endif
+}
 }  // namespace
 
 #ifndef PLATFORM_PICO
@@ -63,12 +89,21 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       partsSpritesheet(-1),
       screenSpritesheet(-1),
       picoSpritesheet(-1),
+      bossIconSpritesheet(-1),
+      titleSpritesheet(-1),
+      bossSeanSpritesheet(-1),
+      gameOverSpritesheet(-1),
       hpUIFrame(0),
       hpUIAnimTimer(0.0f),
       portalFrame(0),
       portalAnimTimer(0.0f),
+      bossSeanFrame(0),
+      bossSeanAnimTimer(0.0f),
+      gameOverFrame(0),
+      gameOverAnimTimer(0.0f),
       levelObjectiveCollected(false),
-      levelHasBoss(false)
+      levelHasBoss(false),
+      state(GameState::MainMenu)
 {
     currentLevelName[0] = '\0';
 }
@@ -97,6 +132,12 @@ void Game::init() {
     partsSpritesheet = renderer->loadTexture("../assets/PartsSprite.png");
     screenSpritesheet = renderer->loadTexture("../assets/ScreenSprite.png");
     picoSpritesheet = renderer->loadTexture("../assets/PicoSprite.png");
+    bossIconSpritesheet = renderer->loadTexture("../assets/Boss.png");
+    titleSpritesheet = renderer->loadTexture("../assets/SYDEQuest.png");
+    bossSeanSpritesheet = renderer->loadTexture("../assets/SeanSpeziale.png");
+    gameOverSpritesheet = renderer->loadTexture("../assets/GameOver.png");
+
+    state = GameState::MainMenu;
 }
 
 #ifdef PLATFORM_PICO
@@ -165,7 +206,7 @@ void Game::resetAndSpawnEntitiesPico() {
     const Vec2* bossSpawnPoints = level.getBossSpawns();
     const BossType* bossTypesData = level.getBossTypes();
     uint8_t bossCount = level.getBossSpawnCount();
-    levelHasBoss = bossCount > 0;
+    levelHasBoss = (bossCount > 0);
     for (uint8_t i = 0; i < bossCount; i++) {
         BossEnemy* b = bosses.allocate();
         if (b) {
@@ -195,20 +236,22 @@ bool Game::loadLevel(const char* levelName) {
 #ifdef PLATFORM_PICO
     // Embedded build: CSV paths from portals are not on a filesystem; use baked level data.
     bool ok = false;
-    if (std::strstr(levelName, "Level2") != nullptr) {
-        ok = level.loadFromBinaryData(level2_tiles, level2_width, level2_height, &level2_metadata);
-    } else if (std::strstr(levelName, "Level3") != nullptr) {
+    if (pathContainsInsensitive(levelName, "level3")) {
         ok = level.loadFromBinaryData(level3_tiles, level3_width, level3_height, &level3_metadata);
+    } else if (pathContainsInsensitive(levelName, "level2")) {
+        ok = level.loadFromBinaryData(level2_tiles, level2_width, level2_height, &level2_metadata);
     } else {
         ok = level.loadFromBinaryData(level1_tiles, level1_width, level1_height, &level1_metadata);
     }
     if (!ok) {
         return false;
     }
+    levelHasBoss = (level.getBossSpawnCount() > 0);
 #else
     if (!level.loadFromFile(levelName)) {
         return false;
     }
+    levelHasBoss = !level.getBossSpawns().empty();
 #endif
 
     strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
@@ -256,7 +299,6 @@ bool Game::loadLevel(const char* levelName) {
 
     const std::vector<Vec2>& bossSpawnPoints = level.getBossSpawns();
     const std::vector<BossType>& bossTypesVec = level.getBossTypes();
-    levelHasBoss = !bossSpawnPoints.empty();
 
     for (size_t i = 0; i < bossSpawnPoints.size(); i++) {
         bosses.push_back(BossEnemy(bossSpawnPoints[i], bossTypesVec[i]));
@@ -275,13 +317,58 @@ bool Game::loadLevel(const char* levelName) {
     return true;
 }
 
+void Game::resetLevel() {
+    if (currentLevelName[0] == '\0') {
+        return;
+    }
+    player.health = 3;
+    loadLevel(currentLevelName);
+}
+
 void Game::update() {
     timer->update();
     input->update();
-    
+
     float dt = timer->getDeltaTime();
-    
-    // Input player actions
+
+    if (input->wasJustPressed(Button::MenuBack)) {
+        state = GameState::MainMenu;
+        return;
+    }
+
+    if (state == GameState::MainMenu) {
+        const Rect startBtn = menuStartButtonRect();
+        int mx = 0;
+        int my = 0;
+        input->getMouseLogicalPosition(mx, my);
+        if (input->wasJustPressed(Button::MenuConfirm) ||
+            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, startBtn))) {
+            state = GameState::Playing;
+            resetLevel();
+        }
+        return;
+    }
+    if (state == GameState::GameOver) {
+        if (gameOverSpritesheet >= 0) {
+            gameOverAnimTimer += dt;
+            if (gameOverAnimTimer >= 0.1f) {
+                gameOverAnimTimer -= 0.1f;
+                gameOverFrame = (gameOverFrame + 1) % 12;
+            }
+        }
+        const Rect retryBtn = gameOverRetryButtonRect();
+        int mx = 0;
+        int my = 0;
+        input->getMouseLogicalPosition(mx, my);
+        if (input->wasJustPressed(Button::MenuConfirm) ||
+            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, retryBtn))) {
+            state = GameState::Playing;
+            resetLevel();
+        }
+        return;
+    }
+
+    // Playing
     controller.update(player, input, dt);
     
     // Physics
@@ -477,6 +564,7 @@ void Game::update() {
             if (playerRect.intersects(basicEnemies[i].getCollider())) {
                 if (player.health > 0) {
                     player.health -= 1;
+                    notifyPlayerDamageHaptics();
                 }
                 player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                 break;
@@ -489,6 +577,7 @@ void Game::update() {
                 if (playerRect.intersects(rangedEnemies[i].getCollider())) {
                     if (player.health > 0) {
                         player.health -= 1;
+                        notifyPlayerDamageHaptics();
                     }
                     player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                     break;
@@ -500,6 +589,7 @@ void Game::update() {
             if (playerRect.intersects(enemy.getCollider())) {
                 if (player.health > 0) {
                     player.health -= 1;
+                    notifyPlayerDamageHaptics();
                 }
                 player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                 break;
@@ -511,6 +601,7 @@ void Game::update() {
                 if (playerRect.intersects(enemy.getCollider())) {
                     if (player.health > 0) {
                         player.health -= 1;
+                        notifyPlayerDamageHaptics();
                     }
                     player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
                     break;
@@ -584,7 +675,36 @@ void Game::update() {
         portalAnimTimer -= 0.1667f;
         portalFrame = (portalFrame + 1) % 12;
     }
-    
+
+    if (bossSeanSpritesheet >= 0 && levelHasBoss) {
+        bool anyBossVisible = false;
+#ifdef PLATFORM_PICO
+        for (size_t i = 0; i < bosses.size(); i++) {
+            if (!bosses.isActive(i)) {
+                continue;
+            }
+            if (bosses[i].active && bosses[i].activated) {
+                anyBossVisible = true;
+                break;
+            }
+        }
+#else
+        for (const auto& b : bosses) {
+            if (b.active && b.activated) {
+                anyBossVisible = true;
+                break;
+            }
+        }
+#endif
+        if (anyBossVisible) {
+            bossSeanAnimTimer += dt;
+            if (bossSeanAnimTimer >= 0.1f) {
+                bossSeanAnimTimer -= 0.1f;
+                bossSeanFrame = (bossSeanFrame + 1) % 12;
+            }
+        }
+    }
+
     // Check player projectile vs basic enemy collisions
 #ifdef PLATFORM_PICO
     for (size_t i = 0; i < projectiles.size(); i++) {
@@ -668,6 +788,7 @@ void Game::update() {
             if (player.invincibilityTimer <= 0.0f) {
                 if (player.health > 0) {
                     player.health -= 1;
+                    notifyPlayerDamageHaptics();
                 }
                 player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
             }
@@ -696,6 +817,7 @@ void Game::update() {
             if (player.invincibilityTimer <= 0.0f) {
                 if (player.health > 0) {
                     player.health -= 1;
+                    notifyPlayerDamageHaptics();
                 }
                 player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
             }
@@ -799,15 +921,15 @@ void Game::update() {
     // Check portal collisions
     checkPortalCollisions();
     
-    // Check player death
     if (player.health <= 0) {
-#ifdef PLATFORM_PICO
-        resetAndSpawnEntitiesPico();
-#else
-        loadLevel(currentLevelName);
-#endif
-        player.health = 1;
+        state = GameState::GameOver;
+        gameOverFrame = 0;
+        gameOverAnimTimer = 0.0f;
     }
+}
+
+void Game::notifyPlayerDamageHaptics() {
+    haptics->trigger(HapticEffect::Medium, 100);
 }
 
 void Game::checkPortalCollisions() {
@@ -872,9 +994,7 @@ bool Game::hasAliveBoss() const {
 #endif
 }
 
-void Game::render() {
-    renderer->beginFrame();
-    
+void Game::renderPlayingWorld() {
     int camX = camera.getOffsetX();
     int camY = camera.getOffsetY();
     
@@ -970,7 +1090,11 @@ void Game::render() {
         Rect dstRect = bosses[i].getCollider();
         dstRect.x -= TO_FIXED(camX);
         dstRect.y -= TO_FIXED(camY);
-        renderer->drawRect(dstRect, Color(255, 0, 255), true);
+        if (bossSeanSpritesheet >= 0 && levelHasBoss) {
+            renderer->drawSpriteFrame(bossSeanSpritesheet, bossSeanFrame, 32, 32, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(255, 0, 255), true);
+        }
     }
 #else
     for (const auto& enemy : basicEnemies) {
@@ -1002,7 +1126,11 @@ void Game::render() {
         Rect dstRect = boss.getCollider();
         dstRect.x -= camX;
         dstRect.y -= camY;
-        renderer->drawRect(dstRect, Color(255, 0, 255), true);
+        if (bossSeanSpritesheet >= 0 && levelHasBoss) {
+            renderer->drawSpriteFrame(bossSeanSpritesheet, bossSeanFrame, 32, 32, dstRect, false);
+        } else {
+            renderer->drawRect(dstRect, Color(255, 0, 255), true);
+        }
     }
 #endif
     
@@ -1186,7 +1314,11 @@ void Game::render() {
 
     if (levelHasBoss) {
         Rect bossIconDst(8.0f, 47.0f, 16.0f, 16.0f);
-        renderer->drawRect(bossIconDst, Color(255, 0, 0), true);
+        if (bossIconSpritesheet >= 0) {
+            renderer->drawSpriteFrame(bossIconSpritesheet, 0, 16, 16, bossIconDst, false);
+        } else {
+            renderer->drawRect(bossIconDst, Color(255, 0, 0), true);
+        }
 #ifdef PLATFORM_PICO
         const char* bossStatusText = hasAliveBoss() ? "0/1" : "1/1";
         renderer->drawText(bossStatusText, 28, 47, Color(255, 255, 255));
@@ -1195,7 +1327,115 @@ void Game::render() {
         renderer->drawText(bossStatusText.c_str(), 28, 48, Color(255, 255, 255));
 #endif
     }
+}
 
+void Game::renderMainMenu() {
+    const int sw = renderer->getScreenWidth();
+
+    Rect title = menuTitlePlaceholderRect();
+    if (titleSpritesheet >= 0) {
+        renderer->drawSpriteFrame(titleSpritesheet, 0, 128, 32, title, false);
+    } else {
+        renderer->drawRect(title, Color(180, 180, 200), true);
+        renderer->drawRect(title, Color(0, 0, 0), false);
+    }
+
+    const Rect btn = menuStartButtonRect();
+    renderer->drawRect(btn, Color(64, 64, 64), true);
+    renderer->drawRect(btn, Color(0, 0, 0), false);
+
+    const char* startLabel = "PLAY";
+    const int w0 = renderer->measureTextWidth(startLabel);
+#ifdef PLATFORM_PICO
+    // Rect uses fixed_t on Pico; cast to int is wrong (raw fixed units). Match HUD cell height 8*2=16.
+    const int btnTop = static_cast<int>(FROM_FIXED(btn.y));
+    const int btnH = static_cast<int>(FROM_FIXED(btn.height));
+    const int txtY = btnTop + (btnH - 16) / 2;
+#else
+    const int txtY = static_cast<int>(btn.y) + (static_cast<int>(btn.height) - 12) / 2;
+#endif
+    renderer->drawText(startLabel, (sw - w0) / 2, txtY, Color(255, 255, 255));
+}
+
+void Game::renderGameOver() {
+    renderer->clear(Color(0, 0, 0));
+
+    const int sw = renderer->getScreenWidth();
+
+    const char* msg = "GAME OVER";
+    const int msgW = renderer->measureTextWidth(msg);
+    const int msgY = 40;
+    renderer->drawText(msg, (sw - msgW) / 2, msgY, Color(255, 255, 255));
+
+    Rect iconRect(static_cast<float>(sw / 2 - 16), static_cast<float>(msgY + 28), 32.0f, 32.0f);
+    if (gameOverSpritesheet >= 0) {
+        renderer->drawSpriteFrame(gameOverSpritesheet, gameOverFrame, 32, 32, iconRect, false);
+    } else {
+        renderer->drawRect(iconRect, Color(200, 200, 200), true);
+        renderer->drawRect(iconRect, Color(0, 0, 0), false);
+    }
+
+    const Rect retryBtn = gameOverRetryButtonRect();
+    renderer->drawRect(retryBtn, Color(64, 64, 64), true);
+    renderer->drawRect(retryBtn, Color(0, 0, 0), false);
+
+    const char* retryLabel = "RETRY";
+    const int w1 = renderer->measureTextWidth(retryLabel);
+#ifdef PLATFORM_PICO
+    const int retryTop = static_cast<int>(FROM_FIXED(retryBtn.y));
+    const int retryH = static_cast<int>(FROM_FIXED(retryBtn.height));
+    const int txtY = retryTop + (retryH - 16) / 2;
+#else
+    const int txtY = static_cast<int>(retryBtn.y) + (static_cast<int>(retryBtn.height) - 12) / 2;
+#endif
+    renderer->drawText(retryLabel, (sw - w1) / 2, txtY, Color(255, 255, 255));
+}
+
+Rect Game::menuTitlePlaceholderRect() const {
+    const int sw = renderer->getScreenWidth();
+    constexpr int titleW = 128;
+    constexpr int titleH = 32;
+    constexpr int titleY = 60;
+    const int titleX = (sw - titleW) / 2;
+    return Rect(titleX, titleY, titleW, titleH);
+}
+
+Rect Game::menuStartButtonRect() const {
+    const int sw = renderer->getScreenWidth();
+    constexpr int titleW = 128;
+    constexpr int titleH = 32;
+    constexpr int titleY = 60;
+    constexpr int btnW = 100;
+    constexpr int btnH = 28;
+    const int btnY = titleY + titleH + 16;
+    const int btnX = (sw - btnW) / 2;
+    return Rect(btnX, btnY, btnW, btnH);
+}
+
+Rect Game::gameOverRetryButtonRect() const {
+    const int sw = renderer->getScreenWidth();
+    const int msgY = 40;
+    const int iconY = msgY + 28;
+    constexpr int btnW = 100;
+    constexpr int btnH = 28;
+    const int btnY = iconY + 32 + 16;
+    const int btnX = (sw - btnW) / 2;
+    return Rect(btnX, btnY, btnW, btnH);
+}
+
+void Game::render() {
+    renderer->beginFrame();
+    switch (state) {
+    case GameState::MainMenu:
+        renderMainMenu();
+        break;
+    case GameState::GameOver:
+        renderGameOver();
+        break;
+    case GameState::Playing:
+        renderPlayingWorld();
+        break;
+    }
     renderer->endFrame();
 }
 

@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
     
     // Create platform implementations
     DesktopRenderer renderer(sdlRenderer, SCREEN_WIDTH, SCREEN_HEIGHT);
-    DesktopInput input;
+    DesktopInput input(sdlRenderer);
     DesktopHaptics haptics;
     DesktopTimer timer;
     

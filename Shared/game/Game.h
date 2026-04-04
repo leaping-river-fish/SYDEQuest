@@ -24,6 +24,12 @@ class IInput;
 class IHaptics;
 class ITimer;
 
+enum class GameState {
+    MainMenu,
+    Playing,
+    GameOver
+};
+
 #ifdef PLATFORM_PICO
 template<typename T, size_t MaxCount>
 struct EntityPool {
@@ -82,6 +88,8 @@ public:
     
     bool loadLevel(const char* levelName);
     Level& getLevel() { return level; }
+
+    void resetLevel();
 
 #ifdef PLATFORM_PICO
     /** Reposition player and repopulate entity pools from the current Level (after loadFromBinaryData). */
@@ -153,7 +161,11 @@ private:
     int partsSpritesheet;
     int screenSpritesheet;
     int picoSpritesheet;
-    
+    int bossIconSpritesheet;
+    int titleSpritesheet;
+    int bossSeanSpritesheet;
+    int gameOverSpritesheet;
+
     // HP UI animation state
     int hpUIFrame;
     float hpUIAnimTimer;
@@ -161,7 +173,13 @@ private:
     // Portal animation state
     int portalFrame;
     float portalAnimTimer;
-    
+
+    int bossSeanFrame;
+    float bossSeanAnimTimer;
+
+    int gameOverFrame;
+    float gameOverAnimTimer;
+
     // Current level tracking
     char currentLevelName[64];
     
@@ -169,8 +187,18 @@ private:
     bool levelObjectiveCollected;
     /** True if current level file defines at least one boss spawn (drives boss HUD). */
     bool levelHasBoss;
-    
+
+    GameState state;
+
+    void renderMainMenu();
+    void renderGameOver();
+    void renderPlayingWorld();
+    Rect menuTitlePlaceholderRect() const;
+    Rect menuStartButtonRect() const;
+    Rect gameOverRetryButtonRect() const;
+
     void checkPortalCollisions();
+    void notifyPlayerDamageHaptics();
     bool hasAliveBoss() const;
     int getObjectiveSpritesheet(ObjectiveType type) const;
 

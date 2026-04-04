@@ -14,6 +14,9 @@ public:
     bool wasJustPressed(Button button) const override;
     bool wasJustReleased(Button button) const override;
 
+    void getMouseLogicalPosition(int& outX, int& outY) const override;
+    bool wasMousePrimaryJustPressed() const override;
+
 private:
     uint16_t currentState;
     uint16_t previousState;
@@ -21,9 +24,11 @@ private:
     static constexpr int PIN_JOY_X = 26;
     static constexpr int PIN_JOY_Y = 27;
     static constexpr int PIN_FIRE = kFireGpioPin;
-    static constexpr int PIN_PAUSE = 6;
+    /** GP6 — back to title (active low). */
+    static constexpr int PIN_MENU_BACK = 6;
+    /** GP7 — menu confirm / start / retry (active low). */
+    static constexpr int PIN_MENU_CONFIRM = 7;
 
-    /** Wider neutral band (800–3200) reduces spurious Jump/Down from ADC noise at rest. */
     static constexpr uint16_t LOW_THRESHOLD = 800;
     static constexpr uint16_t HIGH_THRESHOLD = 3200;
 

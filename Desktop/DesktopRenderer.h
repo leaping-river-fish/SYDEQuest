@@ -22,7 +22,8 @@ public:
                          const Rect& dstRect, bool flipHorizontal) override;
     
     void drawText(const char* text, int x, int y, Color color) override;
-    
+    int measureTextWidth(const char* text) const override;
+
     int getScreenWidth() const override { return screenWidth; }
     int getScreenHeight() const override { return screenHeight; }
     

@@ -18,11 +18,34 @@
 #include "assets/objective_parts_sprite.h"
 #include "assets/objective_screen_sprite.h"
 #include "assets/objective_pico_sprite.h"
+#include "assets/boss_icon_sprite.h"
+#include "assets/title_sprite.h"
+#include "assets/boss_sean_sprite.h"
+#include "assets/game_over_sprite.h"
 #include "board_config.h"
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstring>
+#include <cctype>
+
+namespace {
+
+/** Basename compare for loadTexture: paths are fake on Pico; only the filename must match. */
+bool filenameEqCi(const char* a, const char* b) {
+    if (!a || !b) {
+        return false;
+    }
+    for (; *a && *b; ++a, ++b) {
+        if (std::tolower(static_cast<unsigned char>(*a)) !=
+            std::tolower(static_cast<unsigned char>(*b))) {
+            return false;
+        }
+    }
+    return *a == *b;
+}
+
+}  // namespace
 
 /** Virtual multi-frame spritesheet: 4 frames per row (matches png_to_rgb565.py sheet export). */
 static constexpr int kSpriteSheetCols = 4;
@@ -66,6 +89,16 @@ static_assert(sizeof(objective_screen_sprite) / sizeof(objective_screen_sprite[0
               static_cast<size_t>(OBJECTIVE_SCREEN_SPRITE_WIDTH) * OBJECTIVE_SCREEN_SPRITE_HEIGHT);
 static_assert(sizeof(objective_pico_sprite) / sizeof(objective_pico_sprite[0]) ==
               static_cast<size_t>(OBJECTIVE_PICO_SPRITE_WIDTH) * OBJECTIVE_PICO_SPRITE_HEIGHT);
+static_assert(sizeof(boss_icon_sprite) / sizeof(boss_icon_sprite[0]) ==
+              static_cast<size_t>(BOSS_ICON_SPRITE_WIDTH) * BOSS_ICON_SPRITE_HEIGHT);
+static_assert(sizeof(title_sprite) / sizeof(title_sprite[0]) ==
+              static_cast<size_t>(TITLE_SPRITE_WIDTH) * TITLE_SPRITE_HEIGHT);
+static_assert(sizeof(boss_sean_sprite) / sizeof(boss_sean_sprite[0]) ==
+              static_cast<size_t>(BOSS_SEAN_SPRITE_FRAME_COUNT) * BOSS_SEAN_SPRITE_FRAME_WIDTH *
+                  BOSS_SEAN_SPRITE_FRAME_HEIGHT);
+static_assert(sizeof(game_over_sprite) / sizeof(game_over_sprite[0]) ==
+              static_cast<size_t>(GAME_OVER_SPRITE_FRAME_COUNT) * GAME_OVER_SPRITE_FRAME_WIDTH *
+                  GAME_OVER_SPRITE_FRAME_HEIGHT);
 
 PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) {
     // Physical panel is 240x320 portrait; landscape (320x240) is applied after begin() via setRotation
@@ -110,7 +143,7 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
     gpio_set_function(bl_pin, GPIO_FUNC_PWM);
     pwm_set_gpio_level(bl_pin, 65535);
     
-    // IDs match Game::init loadTexture order (0..16)
+    // IDs match Game::init loadTexture order (0..20)
     registerSprite(0, player_sprite, PLAYER_SPRITE_FRAME_WIDTH, PLAYER_SPRITE_FRAME_HEIGHT, PLAYER_SPRITE_FRAME_COUNT);
     registerSprite(1, projectile_left_sprite, PROJECTILE_LEFT_SPRITE_FRAME_WIDTH, PROJECTILE_LEFT_SPRITE_FRAME_HEIGHT, PROJECTILE_LEFT_SPRITE_FRAME_COUNT);
     registerSprite(2, projectile_right_sprite, PROJECTILE_RIGHT_SPRITE_FRAME_WIDTH, PROJECTILE_RIGHT_SPRITE_FRAME_HEIGHT, PROJECTILE_RIGHT_SPRITE_FRAME_COUNT);
@@ -128,6 +161,12 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
     registerSprite(14, objective_parts_sprite, OBJECTIVE_PARTS_SPRITE_WIDTH, OBJECTIVE_PARTS_SPRITE_HEIGHT, 1);
     registerSprite(15, objective_screen_sprite, OBJECTIVE_SCREEN_SPRITE_WIDTH, OBJECTIVE_SCREEN_SPRITE_HEIGHT, 1);
     registerSprite(16, objective_pico_sprite, OBJECTIVE_PICO_SPRITE_WIDTH, OBJECTIVE_PICO_SPRITE_HEIGHT, 1);
+    registerSprite(17, boss_icon_sprite, BOSS_ICON_SPRITE_WIDTH, BOSS_ICON_SPRITE_HEIGHT, 1);
+    registerSprite(18, title_sprite, TITLE_SPRITE_WIDTH, TITLE_SPRITE_HEIGHT, 1);
+    registerSprite(19, boss_sean_sprite, BOSS_SEAN_SPRITE_FRAME_WIDTH, BOSS_SEAN_SPRITE_FRAME_HEIGHT,
+                   BOSS_SEAN_SPRITE_FRAME_COUNT);
+    registerSprite(20, game_over_sprite, GAME_OVER_SPRITE_FRAME_WIDTH, GAME_OVER_SPRITE_FRAME_HEIGHT,
+                   GAME_OVER_SPRITE_FRAME_COUNT);
 }
 
 PicoRenderer::~PicoRenderer() {
@@ -149,8 +188,9 @@ void PicoRenderer::registerSprite(int id, const uint16_t* data, int width, int h
 
 namespace {
 
-// 8x8 HUD glyphs (drawn 2x scaled => 16x16 cells): 0-9, 'x', '/'. MSB = left column.
-static const uint8_t HUD_FONT[12][8] = {
+// 8x8 HUD glyphs (drawn 2x scaled => 16x16 cells): 0-9, 'x', '/', uppercase A-Z subset. MSB = left column.
+static const uint8_t HUD_FONT[23][8] = {
+    // 0-9
     {0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00},
     {0x18, 0x38, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00},
     {0x3C, 0x66, 0x06, 0x0C, 0x18, 0x30, 0x7E, 0x00},
@@ -161,18 +201,55 @@ static const uint8_t HUD_FONT[12][8] = {
     {0x7E, 0x06, 0x0C, 0x18, 0x30, 0x30, 0x30, 0x00},
     {0x3C, 0x66, 0x66, 0x3C, 0x66, 0x66, 0x3C, 0x00},
     {0x3C, 0x66, 0x66, 0x3E, 0x06, 0x06, 0x3C, 0x00},
+    // 'x' multiply / decorative
     {0x00, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x00},
     {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x00},
+    // P, L, A, Y, R, E, T (PLAY / RETRY)
+    {0x7C, 0x66, 0x66, 0x7C, 0x60, 0x60, 0x60, 0x00},
+    {0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x7E, 0x00},
+    {0x18, 0x24, 0x24, 0x3C, 0x24, 0x24, 0x24, 0x00},
+    {0x66, 0x66, 0x66, 0x3C, 0x18, 0x18, 0x18, 0x00},
+    {0x7C, 0x66, 0x66, 0x7C, 0x6C, 0x66, 0x66, 0x00},
+    {0x7E, 0x60, 0x60, 0x7C, 0x60, 0x60, 0x7E, 0x00},
+    {0x7E, 0x18, 0x18, 0x18, 0x18, 0x18, 0x18, 0x00},
+    // G, M, O, V (GAME OVER)
+    {0x3C, 0x66, 0x60, 0x6E, 0x66, 0x66, 0x3C, 0x00},
+    {0x63, 0x77, 0x6B, 0x63, 0x63, 0x63, 0x63, 0x00},
+    {0x3C, 0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x00},
+    {0x66, 0x66, 0x66, 0x66, 0x66, 0x3C, 0x18, 0x00},
 };
 
 static constexpr int HUD_FONT_SCALE = 2;
 static constexpr int HUD_FONT_ADVANCE = 8 * HUD_FONT_SCALE;
 
 static int hudGlyphIndex(char c) {
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c == 'x' || c == 'X') return 10;
-    if (c == '/') return 11;
-    return -1;
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    // Multiply symbol: keep 'x' / 'X' before lower->upper so 'x' stays distinct from letters.
+    if (c == 'x' || c == 'X') {
+        return 10;
+    }
+    if (c == '/') {
+        return 11;
+    }
+    if (c >= 'a' && c <= 'z') {
+        c = static_cast<char>(c - 'a' + 'A');
+    }
+    switch (c) {
+        case 'P': return 12;
+        case 'L': return 13;
+        case 'A': return 14;
+        case 'Y': return 15;
+        case 'R': return 16;
+        case 'E': return 17;
+        case 'T': return 18;
+        case 'G': return 19;
+        case 'M': return 20;
+        case 'O': return 21;
+        case 'V': return 22;
+        default: return -1;
+    }
 }
 
 #ifdef PLATFORM_PICO
@@ -472,6 +549,25 @@ void PicoRenderer::drawText(const char* text, int x, int y, Color color) {
     }
 }
 
+int PicoRenderer::measureTextWidth(const char* text) const {
+    if (!text || !text[0]) {
+        return 0;
+    }
+    constexpr int advance = 8 * 2;  // matches HUD_FONT_SCALE in this file
+    int w = 0;
+    for (const char* p = text; *p; ++p) {
+        if (*p == ' ') {
+            w += advance;
+            continue;
+        }
+        if (hudGlyphIndex(*p) < 0) {
+            continue;
+        }
+        w += advance;
+    }
+    return w;
+}
+
 int PicoRenderer::loadTexture(const char* path) {
     const char* base = path;
     for (const char* p = path; *p; ++p) {
@@ -479,23 +575,27 @@ int PicoRenderer::loadTexture(const char* path) {
             base = p + 1;
         }
     }
-    // Same order as Game::init()
-    if (strcmp(base, "AlternatingWalk.png") == 0) return 0;
-    if (strcmp(base, "PencilSpinLeft.png") == 0) return 1;
-    if (strcmp(base, "PencilSpinRight.png") == 0) return 2;
-    if (strcmp(base, "FullTerrainSpriteSheet.png") == 0) return 3;
-    if (strcmp(base, "Circle.png") == 0) return 4;
-    if (strcmp(base, "CalcQuiz.png") == 0) return 5;
-    if (strcmp(base, "IntegralSpinLeft.png") == 0) return 6;
-    if (strcmp(base, "IntegralSpinRight.png") == 0) return 7;
-    if (strcmp(base, "Energy.png") == 0) return 8;
-    if (strcmp(base, "EnergyDrink.png") == 0) return 9;
-    if (strcmp(base, "PortalSpriteSheet.png") == 0) return 10;
-    if (strcmp(base, "ChargerSprite.png") == 0) return 11;
-    if (strcmp(base, "EnclosureSprite.png") == 0) return 12;
-    if (strcmp(base, "HapticSprite.png") == 0) return 13;
-    if (strcmp(base, "PartsSprite.png") == 0) return 14;
-    if (strcmp(base, "ScreenSprite.png") == 0) return 15;
-    if (strcmp(base, "PicoSprite.png") == 0) return 16;
+    // Same order as Game::init(); embedded RGB565 — no disk read, basename must map to an ID.
+    if (filenameEqCi(base, "AlternatingWalk.png")) return 0;
+    if (filenameEqCi(base, "PencilSpinLeft.png")) return 1;
+    if (filenameEqCi(base, "PencilSpinRight.png")) return 2;
+    if (filenameEqCi(base, "FullTerrainSpriteSheet.png")) return 3;
+    if (filenameEqCi(base, "Circle.png")) return 4;
+    if (filenameEqCi(base, "CalcQuiz.png")) return 5;
+    if (filenameEqCi(base, "IntegralSpinLeft.png")) return 6;
+    if (filenameEqCi(base, "IntegralSpinRight.png")) return 7;
+    if (filenameEqCi(base, "Energy.png")) return 8;
+    if (filenameEqCi(base, "EnergyDrink.png")) return 9;
+    if (filenameEqCi(base, "PortalSpriteSheet.png")) return 10;
+    if (filenameEqCi(base, "ChargerSprite.png")) return 11;
+    if (filenameEqCi(base, "EnclosureSprite.png")) return 12;
+    if (filenameEqCi(base, "HapticSprite.png")) return 13;
+    if (filenameEqCi(base, "PartsSprite.png")) return 14;
+    if (filenameEqCi(base, "ScreenSprite.png")) return 15;
+    if (filenameEqCi(base, "PicoSprite.png")) return 16;
+    if (filenameEqCi(base, "Boss.png")) return 17;
+    if (filenameEqCi(base, "SYDEQuest.png")) return 18;
+    if (filenameEqCi(base, "SeanSpeziale.png")) return 19;
+    if (filenameEqCi(base, "GameOver.png")) return 20;
     return -1;
 }

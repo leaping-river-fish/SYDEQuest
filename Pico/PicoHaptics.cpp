@@ -17,15 +17,26 @@ constexpr uint8_t REG_WAVESEQ6 = 0x09;
 constexpr uint8_t REG_WAVESEQ7 = 0x0A;
 constexpr uint8_t REG_WAVESEQ8 = 0x0B;
 constexpr uint8_t REG_GO = 0x0C;
+constexpr uint8_t REG_FEEDBACK = 0x1A;
+constexpr uint8_t REG_CONTROL3 = 0x1F;
 
 /** Internal trigger mode (open-loop library waveforms). */
 constexpr uint8_t MODE_INTERNAL_TRIGGER = 0x00;
-/** LRA actuator library; use ERM library (e.g. 1–5) if motor type differs. */
-constexpr uint8_t LIBRARY_LRA = 0x06;
+/** TI closed-loop ERM library 1. */
+constexpr uint8_t LIBRARY_ERM = 0x01;
+/** ERM max drive: bits 6–0 = 0x7F, bit 7 = 0 (ERM vs LRA). */
+constexpr uint8_t FEEDBACK_ERM_MAX = 0x7F;
+/** Control3: clear STANDBY (bit 6). */
+constexpr uint8_t CONTROL3_ACTIVE = 0x00;
 
+/** TI Library 1 — safe low indices for coin ERM. */
 constexpr uint8_t WAVEFORM_LIGHT = 1;
-constexpr uint8_t WAVEFORM_MEDIUM = 47;
-constexpr uint8_t WAVEFORM_HEAVY = 51;
+constexpr uint8_t WAVEFORM_MEDIUM = 2;
+constexpr uint8_t WAVEFORM_HEAVY = 3;
+
+constexpr int kDelayMsBeforeGo = 1;
+constexpr int kPowerStabilizeMs = 250;
+constexpr int kStartupHapticMs = 100;
 
 } // namespace
 
@@ -42,8 +53,12 @@ PicoHaptics::PicoHaptics() {
     gpio_pull_up(PIN_I2C_SDA);
     gpio_pull_up(PIN_I2C_SCL);
 
+    sleep_ms(15);
+
+    writeRegister(REG_CONTROL3, CONTROL3_ACTIVE);
+    writeRegister(REG_FEEDBACK, FEEDBACK_ERM_MAX);
+    writeRegister(REG_LIBRARY, LIBRARY_ERM);
     writeRegister(REG_MODE, MODE_INTERNAL_TRIGGER);
-    writeRegister(REG_LIBRARY, LIBRARY_LRA);
 
     // Clear waveform sequence
     writeRegister(REG_WAVESEQ1, 0);
@@ -55,6 +70,10 @@ PicoHaptics::PicoHaptics() {
     writeRegister(REG_WAVESEQ7, 0);
     writeRegister(REG_WAVESEQ8, 0);
     writeRegister(REG_GO, 0);
+
+    sleep_ms(kPowerStabilizeMs);
+    trigger(HapticEffect::Heavy, kStartupHapticMs);
+    sleep_ms(kStartupHapticMs);
 }
 
 void PicoHaptics::trigger(HapticEffect effect, int durationMs) {
@@ -76,8 +95,11 @@ void PicoHaptics::trigger(HapticEffect effect, int durationMs) {
             break;
     }
 
+    writeRegister(REG_GO, 0);
+    writeRegister(REG_MODE, MODE_INTERNAL_TRIGGER);
     writeRegister(REG_WAVESEQ1, waveform);
     writeRegister(REG_WAVESEQ2, 0); // end of sequence
+    sleep_ms(kDelayMsBeforeGo);
     writeRegister(REG_GO, 1);
 }
 

@@ -9,11 +9,14 @@ PicoInput::PicoInput() : currentState(0), previousState(0) {
     adc_gpio_init(PIN_JOY_Y);
 
     gpio_init(PIN_FIRE);
-    gpio_init(PIN_PAUSE);
+    gpio_init(PIN_MENU_BACK);
+    gpio_init(PIN_MENU_CONFIRM);
     gpio_set_dir(PIN_FIRE, GPIO_IN);
-    gpio_set_dir(PIN_PAUSE, GPIO_IN);
+    gpio_set_dir(PIN_MENU_BACK, GPIO_IN);
+    gpio_set_dir(PIN_MENU_CONFIRM, GPIO_IN);
     gpio_pull_up(PIN_FIRE);
-    gpio_pull_up(PIN_PAUSE);
+    gpio_pull_up(PIN_MENU_BACK);
+    gpio_pull_up(PIN_MENU_CONFIRM);
 }
 
 int PicoInput::buttonToBit(Button button) const {
@@ -22,14 +25,15 @@ int PicoInput::buttonToBit(Button button) const {
         case Button::Right: return 1;
         case Button::Jump: return 2;
         case Button::Down: return 3;
-        case Button::Pause: return 4;
+        case Button::Pause: return 6;  // same physical as MenuBack on Pico (GP6)
         case Button::Fire: return 5;
+        case Button::MenuBack: return 6;
+        case Button::MenuConfirm: return 7;
         default: return -1;
     }
 }
 
 void PicoInput::update() {
-    // Re-assert GP14 as SIO input + pull-up every frame so nothing else can leave it misconfigured.
     gpio_init(PIN_FIRE);
     gpio_set_dir(PIN_FIRE, GPIO_IN);
     gpio_pull_up(PIN_FIRE);
@@ -41,7 +45,6 @@ void PicoInput::update() {
     const uint16_t joyX = adc_read();
     adc_select_input(1);
     const uint16_t joyYRaw = adc_read();
-    // Hardware Y is inverted (physical up = low ADC, down = high). Normalize so joyY rises with physical up.
     const uint16_t joyY = 4095 - joyYRaw;
 
     if (joyX < LOW_THRESHOLD) {
@@ -51,17 +54,20 @@ void PicoInput::update() {
         currentState |= (1 << 1);
     }
     if (joyY < LOW_THRESHOLD) {
-        currentState |= (1 << 3);  // Button::Down
+        currentState |= (1 << 3);
     }
     if (joyY > HIGH_THRESHOLD) {
-        currentState |= (1 << 2);  // Button::Jump
+        currentState |= (1 << 2);
     }
 
     if (!gpio_get(PIN_FIRE)) {
         currentState |= (1 << 5);
     }
-    if (!gpio_get(PIN_PAUSE)) {
-        currentState |= (1 << 4);
+    if (!gpio_get(PIN_MENU_BACK)) {
+        currentState |= (1 << 6);
+    }
+    if (!gpio_get(PIN_MENU_CONFIRM)) {
+        currentState |= (1 << 7);
     }
 }
 
@@ -81,4 +87,13 @@ bool PicoInput::wasJustReleased(Button button) const {
     int bit = buttonToBit(button);
     if (bit < 0) return false;
     return !(currentState & (1 << bit)) && (previousState & (1 << bit));
+}
+
+void PicoInput::getMouseLogicalPosition(int& outX, int& outY) const {
+    outX = 0;
+    outY = 0;
+}
+
+bool PicoInput::wasMousePrimaryJustPressed() const {
+    return false;
 }

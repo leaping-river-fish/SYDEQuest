@@ -28,7 +28,8 @@ public:
     void drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                   int cameraOffsetX, int cameraOffsetY) override;
     void drawText(const char* text, int x, int y, Color color) override;
-    
+    int measureTextWidth(const char* text) const override;
+
     int loadTexture(const char* path) override;
     
     int getScreenWidth() const override { return SCREEN_WIDTH; }
@@ -44,7 +45,7 @@ private:
 
     uint16_t* framebuffer;
 
-    static constexpr int kMaxSprites = 20;
+    static constexpr int kMaxSprites = 32;
     SpriteData sprites[kMaxSprites];
     int spriteCount;
     

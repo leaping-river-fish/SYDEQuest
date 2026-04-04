@@ -1,6 +1,8 @@
 #include "DesktopRenderer.h"
+#include <SDL2/SDL_filesystem.h>
 #include <SDL2/SDL_image.h>
 #include <stdexcept>
+#include <string>
 
 DesktopRenderer::DesktopRenderer(SDL_Renderer* renderer, int w, int h)
     : renderer(renderer), screenWidth(w), screenHeight(h), font(nullptr)
@@ -92,6 +94,29 @@ void DesktopRenderer::drawTile(int tileX, int tileY, int8_t tileId, int terrainS
 int DesktopRenderer::loadTexture(const char* path) {
     SDL_Surface* surface = IMG_Load(path);
     if (!surface) {
+        const char* base = path;
+        for (const char* p = path; *p; ++p) {
+            if (*p == '/' || *p == '\\') {
+                base = p + 1;
+            }
+        }
+        char* exeDir = SDL_GetBasePath();
+        if (exeDir) {
+            const std::string candidates[] = {
+                std::string(exeDir) + "../../assets/" + base,
+                std::string(exeDir) + "../assets/" + base,
+                std::string(exeDir) + "assets/" + base,
+            };
+            for (const auto& c : candidates) {
+                surface = IMG_Load(c.c_str());
+                if (surface) {
+                    break;
+                }
+            }
+            SDL_free(exeDir);
+        }
+    }
+    if (!surface) {
         return -1;
     }
     
@@ -160,4 +185,15 @@ void DesktopRenderer::drawText(const char* text, int x, int y, Color color) {
     }
     
     SDL_FreeSurface(surface);
+}
+
+int DesktopRenderer::measureTextWidth(const char* text) const {
+    if (!font || !text || text[0] == '\0') {
+        return 0;
+    }
+    int w = 0;
+    if (TTF_SizeText(font, text, &w, nullptr) != 0) {
+        return 0;
+    }
+    return w;
 }

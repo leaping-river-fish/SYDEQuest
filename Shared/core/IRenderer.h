@@ -25,7 +25,8 @@ public:
                                  const Rect& dstRect, bool flipHorizontal) = 0;
     
     virtual void drawText(const char* text, int x, int y, Color color) = 0;
-    
+    virtual int measureTextWidth(const char* text) const = 0;
+
     virtual int getScreenWidth() const = 0;
     virtual int getScreenHeight() const = 0;
 };

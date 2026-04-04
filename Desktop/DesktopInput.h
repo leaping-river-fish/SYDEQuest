@@ -4,20 +4,28 @@
 
 class DesktopInput : public IInput {
 public:
-    DesktopInput();
-    
+    explicit DesktopInput(SDL_Renderer* sdlRenderer);
+
     void update() override;
     bool isPressed(Button button) const override;
     bool wasJustPressed(Button button) const override;
     bool wasJustReleased(Button button) const override;
-    
+
+    void getMouseLogicalPosition(int& outX, int& outY) const override;
+    bool wasMousePrimaryJustPressed() const override;
+
     bool shouldQuit() const { return quit; }
-    
+
 private:
-    bool currentState[6];
-    bool previousState[6];
+    SDL_Renderer* sdlRenderer;
+    bool currentState[8];
+    bool previousState[8];
     bool quit;
-    
+
+    int mouseLogicalX;
+    int mouseLogicalY;
+    bool mousePrimaryDown;
+    bool mousePrimaryWasDown;
+
     int getButtonIndex(Button button) const;
 };
-
