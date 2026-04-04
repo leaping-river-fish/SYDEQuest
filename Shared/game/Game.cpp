@@ -18,6 +18,7 @@
 #include "../../Pico/assets/level1_data.h"
 #include "../../Pico/assets/level2_data.h"
 #include "../../Pico/assets/level3_data.h"
+#include "../../Pico/assets/level4_data.h"
 #endif
 
 namespace {
@@ -253,7 +254,9 @@ bool Game::loadLevel(const char* levelName) {
 #ifdef PLATFORM_PICO
     // Embedded build: CSV paths from portals are not on a filesystem; use baked level data.
     bool ok = false;
-    if (pathContainsInsensitive(levelName, "level3")) {
+    if (pathContainsInsensitive(levelName, "level4")) {
+        ok = level.loadFromBinaryData(level4_tiles, level4_width, level4_height, &level4_metadata);
+    } else if (pathContainsInsensitive(levelName, "level3")) {
         ok = level.loadFromBinaryData(level3_tiles, level3_width, level3_height, &level3_metadata);
     } else if (pathContainsInsensitive(levelName, "level2")) {
         ok = level.loadFromBinaryData(level2_tiles, level2_width, level2_height, &level2_metadata);

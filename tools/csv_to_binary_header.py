@@ -6,6 +6,7 @@ Regenerate embedded Pico headers after editing a level CSV, then diff to verify 
     python tools/csv_to_binary_header.py levels/Level1.csv Pico/assets/level1_data.h level1
     python tools/csv_to_binary_header.py levels/Level2.csv Pico/assets/level2_data.h level2
     python tools/csv_to_binary_header.py levels/Level3.csv Pico/assets/level3_data.h level3
+    python tools/csv_to_binary_header.py levels/Level4.csv Pico/assets/level4_data.h level4
 
 Use ``git diff Pico/assets/level*_data.h`` (or your VCS) to review changes before committing.
 """
@@ -71,9 +72,11 @@ def parse_metadata(metadata_lines, level_name):
         "../levels/Level1.csv": 0,
         "../levels/Level2.csv": 1,
         "../levels/Level3.csv": 2,
+        "../levels/Level4.csv": 3,
         "Level1.csv": 0,
         "Level2.csv": 1,
         "Level3.csv": 2,
+        "Level4.csv": 3,
     }
 
     for line in metadata_lines:

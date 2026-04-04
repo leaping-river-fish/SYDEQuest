@@ -7,4 +7,6 @@ python "%~dp0csv_to_binary_header.py" "%ROOT%\levels\Level2.csv" "%ROOT%\Pico\as
 if errorlevel 1 exit /b 1
 python "%~dp0csv_to_binary_header.py" "%ROOT%\levels\Level3.csv" "%ROOT%\Pico\assets\level3_data.h" level3
 if errorlevel 1 exit /b 1
+python "%~dp0csv_to_binary_header.py" "%ROOT%\levels\Level4.csv" "%ROOT%\Pico\assets\level4_data.h" level4
+if errorlevel 1 exit /b 1
 echo Done. Review: git diff Pico/assets/level*_data.h

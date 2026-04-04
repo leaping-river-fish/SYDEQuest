@@ -86,7 +86,7 @@ const SpawnData level3_healthPacks[] = {
 };
 
 const PortalData level3_portals[] = {
-    {752.0f, 608.0f, 32.0f, 32.0f, 0, 48.0f, 464.0f},
+    {752.0f, 608.0f, 32.0f, 32.0f, 3, 48.0f, 1568.0f},
 };
 
 const ObjectiveSpawnData level3_objectives[] = {
