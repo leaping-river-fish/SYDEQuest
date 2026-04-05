@@ -179,13 +179,16 @@ void Collision::resolveArenaWalls(Player& player, const Rect* walls, size_t coun
     if (!walls || count == 0) {
         return;
     }
-    for (int iter = 0; iter < 2; ++iter) {
+    constexpr int kMaxResolveIterations = 6;
+    for (int iter = 0; iter < kMaxResolveIterations; ++iter) {
+        bool anyOverlap = false;
         for (size_t wi = 0; wi < count; ++wi) {
             Rect r = player.getCollider();
             const Rect& w = walls[wi];
             if (!r.intersects(w)) {
                 continue;
             }
+            anyOverlap = true;
             fixed_t penL = (r.x + r.width) - w.x;
             fixed_t penR = (w.x + w.width) - r.x;
             fixed_t penT = (r.y + r.height) - w.y;
@@ -227,6 +230,9 @@ void Collision::resolveArenaWalls(Player& player, const Rect* walls, size_t coun
                 default:
                     break;
             }
+        }
+        if (!anyOverlap) {
+            break;
         }
     }
 }

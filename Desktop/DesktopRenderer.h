@@ -13,6 +13,7 @@ public:
     void endFrame() override;
     void clear(Color color) override;
     void drawRect(const Rect& rect, Color color, bool filled) override;
+    void drawLine(int x0, int y0, int x1, int y1, Color color) override;
     void drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                   int cameraOffsetX, int cameraOffsetY) override;
     

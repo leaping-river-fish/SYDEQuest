@@ -21,6 +21,7 @@ public:
     void endFrame() override;
     
     void drawRect(const Rect& rect, Color color, bool filled) override;
+    void drawLine(int x0, int y0, int x1, int y1, Color color) override;
     void drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) override;
     void drawSpriteFrame(int textureID, int frameIndex, int frameWidth, int frameHeight,
                          const Rect& dstRect, bool flipHorizontal) override;
@@ -56,6 +57,8 @@ private:
     
     void registerSprite(int id, const uint16_t* data, int width, int height, int frameCount);
     void blitTransparentPixels(const uint16_t* base, int w, int h, int destX, int destY, bool flipHorizontal);
+    void blitTransparentPixelsScaled(const uint16_t* base, int sw, int sh, int destX, int destY, int dw, int dh,
+                                     bool flipHorizontal);
     
     inline uint16_t rgb888_to_rgb565(uint8_t r, uint8_t g, uint8_t b) {
         return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);

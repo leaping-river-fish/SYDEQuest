@@ -31,5 +31,10 @@ AFTER HARDWARE:
 
 6. LEVELS WITH OBJECTIVES: 2, 3, 4, 5, 6, 7
 
+Pico issues, dying on level -> goes to next level -> RESPAWN AT LEVEL FIX RESPAWNING BOTH PLATFORMS
+Freezing on some collisions ???
+Make arena walls for hunter consistent
+Integral on pico is not very visible
+add bit map for robert hunter
 
 

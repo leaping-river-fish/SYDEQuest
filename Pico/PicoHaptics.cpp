@@ -34,15 +34,17 @@ constexpr uint8_t WAVEFORM_LIGHT = 1;
 constexpr uint8_t WAVEFORM_MEDIUM = 2;
 constexpr uint8_t WAVEFORM_HEAVY = 3;
 
-constexpr int kDelayMsBeforeGo = 1;
 constexpr int kPowerStabilizeMs = 250;
 constexpr int kStartupHapticMs = 100;
+
+/** Per-transaction cap so a missing/faulty DRV2605 cannot hang the game thread indefinitely. */
+constexpr uint32_t kI2cWriteTimeoutUs = 5000;
 
 } // namespace
 
 bool PicoHaptics::writeRegister(uint8_t reg, uint8_t value) {
     uint8_t buf[2] = {reg, value};
-    const int n = i2c_write_blocking(i2c0, DRV2605_ADDR, buf, 2, false);
+    const int n = i2c_write_timeout_us(i2c0, DRV2605_ADDR, buf, 2, false, kI2cWriteTimeoutUs);
     return n == 2;
 }
 
@@ -95,12 +97,21 @@ void PicoHaptics::trigger(HapticEffect effect, int durationMs) {
             break;
     }
 
-    writeRegister(REG_GO, 0);
-    writeRegister(REG_MODE, MODE_INTERNAL_TRIGGER);
-    writeRegister(REG_WAVESEQ1, waveform);
-    writeRegister(REG_WAVESEQ2, 0); // end of sequence
-    sleep_ms(kDelayMsBeforeGo);
-    writeRegister(REG_GO, 1);
+    // Abort sequence if the bus is stuck — each write is capped by kI2cWriteTimeoutUs.
+    if (!writeRegister(REG_GO, 0)) {
+        return;
+    }
+    if (!writeRegister(REG_MODE, MODE_INTERNAL_TRIGGER)) {
+        return;
+    }
+    if (!writeRegister(REG_WAVESEQ1, waveform)) {
+        return;
+    }
+    if (!writeRegister(REG_WAVESEQ2, 0)) { // end of sequence
+        return;
+    }
+    // No sleep_ms here: blocking delays on the gameplay path cause frame hitches (see gameplay freeze audit).
+    (void)writeRegister(REG_GO, 1);
 }
 
 void PicoHaptics::stop() {

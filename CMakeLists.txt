@@ -49,6 +49,7 @@ set(SHARED_SOURCES
     Shared/game/enemy/BasicEnemy.cpp
     Shared/game/enemy/RangedEnemy.cpp
     Shared/game/enemy/BossEnemy.cpp
+    Shared/game/laser/Laser.cpp
     Shared/game/enemy/EnemyProjectile.cpp
     Shared/game/healthpack/HealthPack.cpp
     Shared/game/objective/Objective.cpp
@@ -113,6 +114,8 @@ elseif(TARGET_PLATFORM STREQUAL "pico")
         Pico
     )
     
+    # GAME_TRACE is intentionally omitted: UART printf in Game::update can block on USB backpressure.
+    # To debug freezes, add: GAME_TRACE (e.g. target_compile_definitions(... GAME_TRACE))
     target_compile_definitions(platformer PRIVATE 
         PLATFORM_PICO
         PICO_HEAP_SIZE=0x14000

@@ -594,6 +594,8 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
             strncpy(portal.targetLevel, "../levels/Level3.csv", sizeof(portal.targetLevel) - 1);
         } else if (pd.targetLevelId == 3) {
             strncpy(portal.targetLevel, "../levels/Level4.csv", sizeof(portal.targetLevel) - 1);
+        } else if (pd.targetLevelId == 4) {
+            strncpy(portal.targetLevel, "../levels/Level5.csv", sizeof(portal.targetLevel) - 1);
         }
         portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
         

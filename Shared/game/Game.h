@@ -1,10 +1,12 @@
 #pragma once
+#include <cstdint>
 #include "player/Player.h"
 #include "player/PlayerController.h"
 #include "projectile/Projectile.h"
 #include "enemy/BasicEnemy.h"
 #include "enemy/RangedEnemy.h"
 #include "enemy/BossEnemy.h"
+#include "laser/Laser.h"
 #include "enemy/EnemyProjectile.h"
 #include "healthpack/HealthPack.h"
 #include "objective/Objective.h"
@@ -79,6 +81,8 @@ struct EntityPool {
 #endif
 
 class Game {
+    friend class BossEnemy;
+
 public:
     Game(IRenderer* renderer, IInput* input, IHaptics* haptics, ITimer* timer);
     
@@ -88,8 +92,6 @@ public:
     
     bool loadLevel(const char* levelName);
     Level& getLevel() { return level; }
-
-    void resetLevel();
 
 #ifdef PLATFORM_PICO
     /** Reposition player and repopulate entity pools from the current Level (after loadFromBinaryData). */
@@ -117,10 +119,11 @@ private:
     EntityPool<BasicEnemy, Level::MAX_BASIC_ENEMIES> basicEnemies;
     EntityPool<RangedEnemy, Level::MAX_RANGED_ENEMIES> rangedEnemies;
     EntityPool<EnemyProjectile, 30> enemyProjectiles;
-    EntityPool<HealthPack, 1> healthPacks;
+    EntityPool<HealthPack, 2> healthPacks;
     EntityPool<Objective, 1> objectives;
     EntityPool<BossEnemy, 3> bosses;
-    EntityPool<Rect, 8> arenaWalls;
+    EntityPool<Laser, 24> lasers;
+    EntityPool<Rect, 12> arenaWalls;
     
     struct EntityState {
         bool isActive;
@@ -138,6 +141,7 @@ private:
     std::vector<HealthPack> healthPacks;
     std::vector<Objective> objectives;
     std::vector<BossEnemy> bosses;
+    std::vector<Laser> lasers;
     std::vector<Rect> arenaWalls;
     
     static constexpr float DEACTIVATION_DISTANCE = 500.0f;
@@ -164,6 +168,7 @@ private:
     int bossIconSpritesheet;
     int titleSpritesheet;
     int bossSeanSpritesheet;
+    int bossLaserSpritesheet;
     int gameOverSpritesheet;
 
     // HP UI animation state
@@ -177,16 +182,29 @@ private:
     int bossSeanFrame;
     float bossSeanAnimTimer;
 
+    int bossLaserFrame;
+    float bossLaserAnimTimer;
+
     int gameOverFrame;
     float gameOverAnimTimer;
 
-    // Current level tracking
+    // Current level tracking (authoritative path is set in loadLevel / Pico sync as soon as the stage is loaded).
     char currentLevelName[64];
-    
+    /** Snapshot for Game Over UI / debugging (prefer deathLevelName when set at lethal death). */
+    char gameOverLevelName[64];
+    /** Filled from currentLevelName when recording a lethal death (before GameOver). Mirrors current after every load. */
+    char deathLevelName[64];
+
     // Objective tracking
     bool levelObjectiveCollected;
     /** True if current level file defines at least one boss spawn (drives boss HUD). */
     bool levelHasBoss;
+    /** False until player leaves portal hitbox after last transition; prevents multi-frame / spawn-in-portal double loads. */
+    bool portalTransitionArmed;
+    /** True after we have recorded deathLevelName for the current lethal death (cleared on load / respawn). */
+    bool deathLevelCaptured;
+    /** Monotonic index for Playing-state updates (debug NDJSON correlation). */
+    uint32_t debugUpdateFrameIndex;
 
     GameState state;
 
@@ -197,8 +215,15 @@ private:
     Rect menuStartButtonRect() const;
     Rect gameOverRetryButtonRect() const;
 
+    void processPlayerInput(float dt);
+    void processPlayerMovement(float dt);
+    /** Returns true if the frame should stop (e.g. pit death handled). */
+    bool resolveCollisions(float dt);
     void checkPortalCollisions();
+    void updateLevelState();
     void notifyPlayerDamageHaptics();
+    /** Contact / projectile / laser damage: applies HP loss, haptics, and i-frames if currently vulnerable. */
+    void applyDamageToPlayerIfVulnerable(int amount);
     bool hasAliveBoss() const;
     int getObjectiveSpritesheet(ObjectiveType type) const;
 
@@ -207,8 +232,27 @@ private:
 #endif
 
     void updateSummonerBoss(BossEnemy& boss, float dt);
+    void updateLaserBoss(BossEnemy& boss, float dt);
+    void spawnLaser(BossEnemy& boss, const Vec2& origin, float dirX, float dirY);
+    void updateLasers(float dt);
+    void renderLasers();
+    void checkLaserCollisions();
+    /** True while a laser is still running (warning line or beam). */
+    bool hasActiveLaser() const;
     void rebuildArenaWallsFromActivatedBosses();
     void resolveArenaWallsForPlayer();
+    /** Laser arena: if player touches the bottom wall strip, snap to a safe spot (avoids fall-through / jitter). */
+    void applyLaserArenaBottomTeleport();
     void renderBossHealthBar();
+
+    /** Pit / out-of-bounds: teleport to `level.getSpawnPoint()` (no second loadLevel — avoids fragile desktop reload). */
+    void respawnPlayerAtCurrentLevelStart();
+
+    /** Full reload of `currentLevelName` from disk (main menu Start). */
+    void restartCurrentLevel();
+    void restartLevelFromPath(const char* path);
+    /** Game Over retry: respawn at spawn with full HP without reloading the level. */
+    void retryAfterGameOver();
+    void beginGameOver();
 };
 

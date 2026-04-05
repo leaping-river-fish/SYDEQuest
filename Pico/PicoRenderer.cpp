@@ -21,6 +21,7 @@
 #include "assets/boss_icon_sprite.h"
 #include "assets/title_sprite.h"
 #include "assets/boss_sean_sprite.h"
+#include "assets/robert_hunter_sprite.h"
 #include "assets/game_over_sprite.h"
 #include "board_config.h"
 #include <algorithm>
@@ -96,6 +97,9 @@ static_assert(sizeof(title_sprite) / sizeof(title_sprite[0]) ==
 static_assert(sizeof(boss_sean_sprite) / sizeof(boss_sean_sprite[0]) ==
               static_cast<size_t>(BOSS_SEAN_SPRITE_FRAME_COUNT) * BOSS_SEAN_SPRITE_FRAME_WIDTH *
                   BOSS_SEAN_SPRITE_FRAME_HEIGHT);
+static_assert(sizeof(robert_hunter_sprite) / sizeof(robert_hunter_sprite[0]) ==
+              static_cast<size_t>(ROBERT_HUNTER_SPRITE_FRAME_COUNT) * ROBERT_HUNTER_SPRITE_FRAME_WIDTH *
+                  ROBERT_HUNTER_SPRITE_FRAME_HEIGHT);
 static_assert(sizeof(game_over_sprite) / sizeof(game_over_sprite[0]) ==
               static_cast<size_t>(GAME_OVER_SPRITE_FRAME_COUNT) * GAME_OVER_SPRITE_FRAME_WIDTH *
                   GAME_OVER_SPRITE_FRAME_HEIGHT);
@@ -143,7 +147,7 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
     gpio_set_function(bl_pin, GPIO_FUNC_PWM);
     pwm_set_gpio_level(bl_pin, 65535);
     
-    // IDs match Game::init loadTexture order (0..20)
+    // IDs match Game::init loadTexture order (0..21)
     registerSprite(0, player_sprite, PLAYER_SPRITE_FRAME_WIDTH, PLAYER_SPRITE_FRAME_HEIGHT, PLAYER_SPRITE_FRAME_COUNT);
     registerSprite(1, projectile_left_sprite, PROJECTILE_LEFT_SPRITE_FRAME_WIDTH, PROJECTILE_LEFT_SPRITE_FRAME_HEIGHT, PROJECTILE_LEFT_SPRITE_FRAME_COUNT);
     registerSprite(2, projectile_right_sprite, PROJECTILE_RIGHT_SPRITE_FRAME_WIDTH, PROJECTILE_RIGHT_SPRITE_FRAME_HEIGHT, PROJECTILE_RIGHT_SPRITE_FRAME_COUNT);
@@ -167,6 +171,8 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
                    BOSS_SEAN_SPRITE_FRAME_COUNT);
     registerSprite(20, game_over_sprite, GAME_OVER_SPRITE_FRAME_WIDTH, GAME_OVER_SPRITE_FRAME_HEIGHT,
                    GAME_OVER_SPRITE_FRAME_COUNT);
+    registerSprite(21, robert_hunter_sprite, ROBERT_HUNTER_SPRITE_FRAME_WIDTH, ROBERT_HUNTER_SPRITE_FRAME_HEIGHT,
+                   ROBERT_HUNTER_SPRITE_FRAME_COUNT);
 }
 
 PicoRenderer::~PicoRenderer() {
@@ -286,6 +292,43 @@ uint16_t sampleSpritePixel(const SpriteData& sprite, int srcXCoord, int srcYCoor
 
 } // namespace
 
+void PicoRenderer::blitTransparentPixelsScaled(const uint16_t* base, int sw, int sh, int destX, int destY, int dw,
+                                                 int dh, bool flipHorizontal) {
+    if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) {
+        return;
+    }
+    const int screenW = logicalWidth();
+    const int screenH = logicalHeight();
+    constexpr uint16_t kChromaKey = 0xF81F;
+
+    for (int dy = 0; dy < dh; dy++) {
+        const int sy = (dy * sh) / dh;
+        const int yClamped = sy >= sh ? sh - 1 : sy;
+        int screenY = destY + dy;
+        if (screenY < 0 || screenY >= screenH) {
+            continue;
+        }
+
+        for (int dx = 0; dx < dw; dx++) {
+            int sx = (dx * sw) / dw;
+            if (sx >= sw) {
+                sx = sw - 1;
+            }
+            if (flipHorizontal) {
+                sx = sw - 1 - sx;
+            }
+            uint16_t pixel = base[yClamped * sw + sx];
+            if (pixel == kChromaKey) {
+                continue;
+            }
+            int screenX = destX + dx;
+            if (screenX >= 0 && screenX < screenW) {
+                framebuffer[screenY * SCREEN_WIDTH + screenX] = pixel;
+            }
+        }
+    }
+}
+
 void PicoRenderer::blitTransparentPixels(const uint16_t* base, int w, int h, int destX, int destY, bool flipHorizontal) {
     const int sw = logicalWidth();
     const int sh = logicalHeight();
@@ -396,6 +439,36 @@ void PicoRenderer::drawRect(const Rect& rect, Color color, bool filled) {
     }
 }
 
+void PicoRenderer::drawLine(int x0, int y0, int x1, int y1, Color color) {
+    const int sw = logicalWidth();
+    const int sh = logicalHeight();
+    uint16_t rgb565 = rgb888_to_rgb565(color.r, color.g, color.b);
+    int dx = std::abs(x1 - x0);
+    int dy = std::abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+    int x = x0;
+    int y = y0;
+    for (;;) {
+        if (x >= 0 && x < sw && y >= 0 && y < sh) {
+            framebuffer[y * SCREEN_WIDTH + x] = rgb565;
+        }
+        if (x == x1 && y == y1) {
+            break;
+        }
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
 void PicoRenderer::drawSprite(int textureID, const Rect& srcRect, const Rect& dstRect, bool flipHorizontal) {
     if (textureID < 0 || textureID >= spriteCount) return;
 
@@ -469,14 +542,33 @@ void PicoRenderer::drawSpriteFrame(int textureID, int frameIndex, int frameWidth
                                    const Rect& dstRect, bool flipHorizontal) {
     (void)frameWidth;
     (void)frameHeight;
-#ifdef PLATFORM_PICO
+    if (textureID < 0 || textureID >= spriteCount) {
+        return;
+    }
+    const SpriteData& sprite = sprites[textureID];
+    if (!sprite.data || frameIndex < 0 || frameIndex >= sprite.frameCount) {
+        return;
+    }
+    const int w = sprite.width;
+    const int h = sprite.height;
+    const uint16_t* base = sprite.data + frameIndex * w * h;
+
     int destX = fixedToPixelInt(dstRect.x);
     int destY = fixedToPixelInt(dstRect.y);
-#else
-    int destX = static_cast<int>(dstRect.x);
-    int destY = static_cast<int>(dstRect.y);
-#endif
-    drawFrame(textureID, frameIndex, destX, destY, flipHorizontal);
+    int destW = fixedToPixelInt(dstRect.width);
+    int destH = fixedToPixelInt(dstRect.height);
+    if (destW <= 0) {
+        destW = w;
+    }
+    if (destH <= 0) {
+        destH = h;
+    }
+
+    if (destW == w && destH == h) {
+        blitTransparentPixels(base, w, h, destX, destY, flipHorizontal);
+    } else {
+        blitTransparentPixelsScaled(base, w, h, destX, destY, destW, destH, flipHorizontal);
+    }
 }
 
 void PicoRenderer::drawFrame(int spriteID, int frameIndex, int destX, int destY, bool flipHorizontal) {
@@ -629,5 +721,6 @@ int PicoRenderer::loadTexture(const char* path) {
     if (filenameEqCi(base, "SYDEQuest.png")) return 18;
     if (filenameEqCi(base, "SeanSpeziale.png")) return 19;
     if (filenameEqCi(base, "GameOver.png")) return 20;
+    if (filenameEqCi(base, "Robert Hunter.png")) return 21;
     return -1;
 }

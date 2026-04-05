@@ -300,18 +300,16 @@ bool RangedEnemy::hasLineOfSight(Vec2 targetPos, const Level& level) const {
     
     int x = x0;
     int y = y0;
-    
-    while (true) {
-        // Check if this tile is solid (blocks line of sight)
+
+    const int maxSteps = std::abs(x1 - x0) + std::abs(y1 - y0) + 2;
+    for (int step = 0; step < maxSteps; ++step) {
         if (level.isSolid(x, y)) {
             return false;
         }
-        
-        // Reached target
         if (x == x1 && y == y1) {
-            break;
+            return true;
         }
-        
+
         int e2 = 2 * err;
         if (e2 > -dy) {
             err -= dy;
@@ -322,8 +320,7 @@ bool RangedEnemy::hasLineOfSight(Vec2 targetPos, const Level& level) const {
             y += sy;
         }
     }
-    
-    return true;
+    return false;
 }
 
 bool RangedEnemy::canDetectPlayer(const Player& player, const Level& level) const {

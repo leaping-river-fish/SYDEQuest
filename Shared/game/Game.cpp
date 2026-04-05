@@ -11,6 +11,36 @@
 #include <cmath>
 
 #ifndef PLATFORM_PICO
+#include <chrono>
+#include <fstream>
+namespace {
+// #region agent log
+void agentDebugNdjsonPortal(const char* location, const char* message, const char* hypothesisId,
+    uint32_t frameId, bool portalTransition, int stateInt) {
+    using namespace std::chrono;
+    const auto ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    std::ofstream f("debug-b1e685.log", std::ios::app);
+    if (!f) {
+        return;
+    }
+    f << "{\"sessionId\":\"b1e685\",\"location\":\"" << location << "\",\"message\":\"" << message
+      << "\",\"hypothesisId\":\"" << hypothesisId << "\",\"data\":{\"frame\":" << frameId
+      << ",\"portalTransition\":" << (portalTransition ? "true" : "false")
+      << ",\"state\":" << stateInt << "},\"timestamp\":" << ms << "}\n";
+}
+// #endregion
+}  // namespace
+#endif
+
+// Pico: add -DGAME_TRACE to compile definitions (or CMake target_compile_definitions) to log UART markers
+// during freezes; requires stdio_init_all() in main.
+#if defined(PLATFORM_PICO) && defined(GAME_TRACE)
+#define GAME_TRACE_MSG(...) printf(__VA_ARGS__)
+#else
+#define GAME_TRACE_MSG(...)
+#endif
+
+#ifndef PLATFORM_PICO
     #include <string>
 #endif
 
@@ -19,11 +49,19 @@
 #include "../../Pico/assets/level2_data.h"
 #include "../../Pico/assets/level3_data.h"
 #include "../../Pico/assets/level4_data.h"
+#include "../../Pico/assets/level5_data.h"
 #endif
 
 namespace {
 // Set to true to force bosses active/visible without entering activation range (debug only).
 constexpr bool kDebugForceBossActivated = false;
+
+/** Robert Hunter sheet (4×3); must match assets/Robert Hunter.png and Pico/assets/robert_hunter_sprite.h. */
+constexpr int kRobertHunterFrameW = 32;
+constexpr int kRobertHunterFrameH = 32;
+constexpr int kRobertHunterFrameCount = 12;
+/** Seconds per animation frame (~6.25 FPS; Sean boss uses 0.1s = 10 FPS). */
+constexpr float kRobertHunterAnimFrameSec = 0.16f;
 
 /** Case-insensitive substring (ASCII); needle must be lower-case. */
 bool pathContainsInsensitive(const char* haystack, const char* needleLower) {
@@ -65,6 +103,36 @@ constexpr float kSummonerWaypointArrivePx = 10.0f;
 constexpr float kSummonerSummonSeconds = 3.0f;
 /** Spawn ranged enemy this many seconds after summoning starts; remaining time is warning before the boss moves. */
 constexpr float kSummonerEnemySpawnAfterSeconds = 1.0f;
+
+const Vec2 kLaserWaypoints[5] = {
+    Vec2(96.0f, 384.0f),
+    Vec2(400.0f, 384.0f),
+    Vec2(96.0f, 592.0f),
+    Vec2(400.0f, 592.0f),
+    Vec2(240.0f, 464.0f),
+};
+constexpr float kLaserBossMoveSpeed = 90.0f;
+constexpr float kLaserBossWaypointArrivePx = 10.0f;
+/** Safe respawn inside the laser arena when the bottom wall is touched (world pixels). */
+constexpr float kLaserArenaBottomRecoverX = 240.0f;
+constexpr float kLaserArenaBottomRecoverY = 480.0f;
+
+#ifdef PLATFORM_PICO
+/** World rect for drawing 16×16 integral art centered on the 8×8 collider (avoids Pico downscale artifacts). */
+Rect enemyProjectilePicoDrawRect(const EnemyProjectile& p) {
+    constexpr fixed_t kPad = TO_FIXED(4.0f);
+    return Rect(p.position.x - kPad, p.position.y - kPad, TO_FIXED(16.0f), TO_FIXED(16.0f));
+}
+#endif
+
+void shuffleLaserWaypointOrder(BossEnemy& boss) {
+    uint32_t& s = boss.laserRngState;
+    for (int i = 4; i > 0; --i) {
+        s = s * 1664525u + 1013904223u;
+        int j = static_cast<int>(s % static_cast<uint32_t>(i + 1));
+        std::swap(boss.laserWaypointOrder[i], boss.laserWaypointOrder[j]);
+    }
+}
 }  // namespace
 
 #ifndef PLATFORM_PICO
@@ -110,6 +178,7 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       bossIconSpritesheet(-1),
       titleSpritesheet(-1),
       bossSeanSpritesheet(-1),
+      bossLaserSpritesheet(-1),
       gameOverSpritesheet(-1),
       hpUIFrame(0),
       hpUIAnimTimer(0.0f),
@@ -117,13 +186,20 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       portalAnimTimer(0.0f),
       bossSeanFrame(0),
       bossSeanAnimTimer(0.0f),
+      bossLaserFrame(0),
+      bossLaserAnimTimer(0.0f),
       gameOverFrame(0),
       gameOverAnimTimer(0.0f),
       levelObjectiveCollected(false),
       levelHasBoss(false),
+      portalTransitionArmed(true),
+      deathLevelCaptured(false),
+      debugUpdateFrameIndex(0),
       state(GameState::MainMenu)
 {
     currentLevelName[0] = '\0';
+    gameOverLevelName[0] = '\0';
+    deathLevelName[0] = '\0';
 }
 
 void Game::init() {
@@ -153,6 +229,7 @@ void Game::init() {
     bossIconSpritesheet = renderer->loadTexture("../assets/Boss.png");
     titleSpritesheet = renderer->loadTexture("../assets/SYDEQuest.png");
     bossSeanSpritesheet = renderer->loadTexture("../assets/SeanSpeziale.png");
+    bossLaserSpritesheet = renderer->loadTexture("../assets/Robert Hunter.png");
     gameOverSpritesheet = renderer->loadTexture("../assets/GameOver.png");
 
     state = GameState::MainMenu;
@@ -172,6 +249,7 @@ void Game::resetAndSpawnEntitiesPico() {
     healthPacks.clear();
     objectives.clear();
     bosses.clear();
+    lasers.clear();
     arenaWalls.clear();
 
     for (size_t i = 0; i < Level::MAX_HEALTH_PACKS; i++) {
@@ -245,6 +323,9 @@ void Game::syncEntitiesFromCurrentLevel(const char* levelNameForTracking) {
     if (levelNameForTracking) {
         strncpy(currentLevelName, levelNameForTracking, sizeof(currentLevelName) - 1);
         currentLevelName[sizeof(currentLevelName) - 1] = '\0';
+        strncpy(deathLevelName, currentLevelName, sizeof(deathLevelName) - 1);
+        deathLevelName[sizeof(deathLevelName) - 1] = '\0';
+        deathLevelCaptured = false;
     }
     resetAndSpawnEntitiesPico();
 }
@@ -254,7 +335,9 @@ bool Game::loadLevel(const char* levelName) {
 #ifdef PLATFORM_PICO
     // Embedded build: CSV paths from portals are not on a filesystem; use baked level data.
     bool ok = false;
-    if (pathContainsInsensitive(levelName, "level4")) {
+    if (pathContainsInsensitive(levelName, "level5")) {
+        ok = level.loadFromBinaryData(level5_tiles, level5_width, level5_height, &level5_metadata);
+    } else if (pathContainsInsensitive(levelName, "level4")) {
         ok = level.loadFromBinaryData(level4_tiles, level4_width, level4_height, &level4_metadata);
     } else if (pathContainsInsensitive(levelName, "level3")) {
         ok = level.loadFromBinaryData(level3_tiles, level3_width, level3_height, &level3_metadata);
@@ -276,7 +359,10 @@ bool Game::loadLevel(const char* levelName) {
 
     strncpy(currentLevelName, levelName, sizeof(currentLevelName) - 1);
     currentLevelName[sizeof(currentLevelName) - 1] = '\0';
-    
+    strncpy(deathLevelName, currentLevelName, sizeof(deathLevelName) - 1);
+    deathLevelName[sizeof(deathLevelName) - 1] = '\0';
+    deathLevelCaptured = false;
+
 #ifdef PLATFORM_PICO
     resetAndSpawnEntitiesPico();
 #else
@@ -291,6 +377,7 @@ bool Game::loadLevel(const char* levelName) {
     healthPacks.clear();
     objectives.clear();
     bosses.clear();
+    lasers.clear();
     arenaWalls.clear();
 #endif
     
@@ -334,63 +421,62 @@ bool Game::loadLevel(const char* levelName) {
     camera.follow(player, level);
 #endif
 
+    // New tiles + spawn: allow one portal transition after leaving the hitbox (or first touch if already armed).
+    portalTransitionArmed = true;
     return true;
 }
 
-void Game::resetLevel() {
-    if (currentLevelName[0] == '\0') {
+void Game::restartLevelFromPath(const char* path) {
+    player.invincibilityTimer = 0.0f;
+    player.health = 3;
+    portalTransitionArmed = true;
+    if (!path || path[0] == '\0') {
         return;
     }
-    player.health = 3;
-    loadLevel(currentLevelName);
+    loadLevel(path);
+#ifdef PLATFORM_PICO
+    camera.follow(player, level);
+#endif
 }
 
-void Game::update() {
-    timer->update();
-    input->update();
+void Game::restartCurrentLevel() {
+    restartLevelFromPath(currentLevelName);
+}
 
-    float dt = timer->getDeltaTime();
+void Game::retryAfterGameOver() {
+    player.invincibilityTimer = 0.0f;
+    player.health = 3;
+    deathLevelCaptured = false;
+    portalTransitionArmed = true;
+    respawnPlayerAtCurrentLevelStart();
+}
 
-    if (input->wasJustPressed(Button::MenuBack)) {
-        state = GameState::MainMenu;
-        return;
-    }
+void Game::beginGameOver() {
+    const char* stage = deathLevelName[0] != '\0' ? deathLevelName : currentLevelName;
+    strncpy(gameOverLevelName, stage, sizeof(gameOverLevelName) - 1);
+    gameOverLevelName[sizeof(gameOverLevelName) - 1] = '\0';
+    state = GameState::GameOver;
+    gameOverFrame = 0;
+    gameOverAnimTimer = 0.0f;
+}
 
-    if (state == GameState::MainMenu) {
-        const Rect startBtn = menuStartButtonRect();
-        int mx = 0;
-        int my = 0;
-        input->getMouseLogicalPosition(mx, my);
-        if (input->wasJustPressed(Button::MenuConfirm) ||
-            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, startBtn))) {
-            state = GameState::Playing;
-            resetLevel();
-        }
-        return;
-    }
-    if (state == GameState::GameOver) {
-        if (gameOverSpritesheet >= 0) {
-            gameOverAnimTimer += dt;
-            if (gameOverAnimTimer >= 0.1f) {
-                gameOverAnimTimer -= 0.1f;
-                gameOverFrame = (gameOverFrame + 1) % 12;
-            }
-        }
-        const Rect retryBtn = gameOverRetryButtonRect();
-        int mx = 0;
-        int my = 0;
-        input->getMouseLogicalPosition(mx, my);
-        if (input->wasJustPressed(Button::MenuConfirm) ||
-            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, retryBtn))) {
-            state = GameState::Playing;
-            resetLevel();
-        }
-        return;
-    }
+void Game::respawnPlayerAtCurrentLevelStart() {
+    // Desktop: do not call loadLevel here — Level::loadFromFile() calls unload() before the parse finishes; a
+    // failed or flaky second reload can wipe tiles while leaving stale metadata, or break spawn/collision so it
+    // feels like you're sent "back to the start". The loaded Level already matches the current stage — use SPAWN.
+    // (Pico: loadLevel also maps unknown paths to embedded Level 1; teleport avoids that too.)
+    player.position = level.getSpawnPoint();
+    player.velocity = Vec2(0.0f, 0.0f);
+    player.setGrounded(false);
+    player.setWantsToDropThrough(false);
+    camera.follow(player, level);
+}
 
-    // Playing
+void Game::processPlayerInput(float dt) {
     controller.update(player, input, dt);
-    
+}
+
+void Game::processPlayerMovement(float dt) {
     // Physics
     physics.applyGravity(player, dt);
     physics.clampVelocity(player);
@@ -427,6 +513,9 @@ void Game::update() {
             Rect w[4];
             boss.computeArenaWalls(w);
             for (int k = 0; k < 4; k++) {
+                if (boss.type == BossType::LASER && k == 3) {
+                    continue;  // bottom strip: handled by applyLaserArenaBottomTeleport (avoids push jitter vs floor)
+                }
                 Rect* slot = arenaWalls.allocate();
                 if (slot) {
                     *slot = w[k];
@@ -449,6 +538,9 @@ void Game::update() {
                 Rect w[4];
                 boss.computeArenaWalls(w);
                 for (int k = 0; k < 4; k++) {
+                    if (boss.type == BossType::LASER && k == 3) {
+                        continue;
+                    }
                     arenaWalls.push_back(w[k]);
                 }
             }
@@ -458,10 +550,10 @@ void Game::update() {
 
 #ifdef PLATFORM_PICO
     {
-        Rect arenaBuf[8];
+        Rect arenaBuf[12];
         size_t an = 0;
         for (size_t i = 0; i < arenaWalls.size(); i++) {
-            if (arenaWalls.isActive(i) && an < 8) {
+            if (arenaWalls.isActive(i) && an < 12) {
                 arenaBuf[an++] = arenaWalls[i];
             }
         }
@@ -492,6 +584,9 @@ void Game::update() {
 #endif
     }
     
+}
+
+bool Game::resolveCollisions(float dt) {
     // Update all projectiles
     int camX = camera.getOffsetX();
     int camY = camera.getOffsetY();
@@ -569,6 +664,9 @@ void Game::update() {
             case BossType::SUMMONER:
                 updateSummonerBoss(b, dt);
                 break;
+            case BossType::LASER:
+                updateLaserBoss(b, dt);
+                break;
             default:
                 b.update(dt, level, player);
                 break;
@@ -581,16 +679,47 @@ void Game::update() {
             case BossType::SUMMONER:
                 updateSummonerBoss(boss, dt);
                 break;
+            case BossType::LASER:
+                updateLaserBoss(boss, dt);
+                break;
             default:
                 boss.update(dt, level, player);
                 break;
         }
     }
 #endif
+    updateLasers(dt);
     rebuildArenaWallsFromActivatedBosses();
+    GAME_TRACE_MSG("A");
     resolveArenaWallsForPlayer();
+    GAME_TRACE_MSG("B");
+    applyLaserArenaBottomTeleport();
+
+    // Bottom of the level grid: touching the lower border (e.g. falling past the map) resets the level and costs 1 HP.
+    {
+        Rect pr = player.getCollider();
+        const fixed_t mapBottom = TO_FIXED(static_cast<float>(level.getHeightInPixels()));
+        if (pr.y + pr.height >= mapBottom) {
+            if (player.health > 0) {
+                player.health -= 1;
+                notifyPlayerDamageHaptics();
+            }
+            if (player.health <= 0) {
+                if (!deathLevelCaptured) {
+                    strncpy(deathLevelName, currentLevelName, sizeof(deathLevelName) - 1);
+                    deathLevelName[sizeof(deathLevelName) - 1] = '\0';
+                    deathLevelCaptured = true;
+                }
+                beginGameOver();
+            } else {
+                respawnPlayerAtCurrentLevelStart();
+            }
+            return true;
+        }
+    }
 
     // Check enemy collision damage
+    GAME_TRACE_MSG("C");
     if (player.invincibilityTimer <= 0.0f) {
         Rect playerRect = player.getCollider();
         
@@ -598,11 +727,7 @@ void Game::update() {
         for (size_t i = 0; i < basicEnemies.size(); i++) {
             if (!basicEnemies.isActive(i)) continue;
             if (playerRect.intersects(basicEnemies[i].getCollider())) {
-                if (player.health > 0) {
-                    player.health -= 1;
-                    notifyPlayerDamageHaptics();
-                }
-                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                applyDamageToPlayerIfVulnerable(1);
                 break;
             }
         }
@@ -611,11 +736,7 @@ void Game::update() {
             for (size_t i = 0; i < rangedEnemies.size(); i++) {
                 if (!rangedEnemies.isActive(i)) continue;
                 if (playerRect.intersects(rangedEnemies[i].getCollider())) {
-                    if (player.health > 0) {
-                        player.health -= 1;
-                        notifyPlayerDamageHaptics();
-                    }
-                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    applyDamageToPlayerIfVulnerable(1);
                     break;
                 }
             }
@@ -627,23 +748,19 @@ void Game::update() {
                 BossEnemy& b = bosses[i];
                 if (!b.active || !b.activated) continue;
                 if (playerRect.intersects(b.getCollider())) {
-                    if (player.health > 0) {
-                        player.health -= 1;
-                        notifyPlayerDamageHaptics();
-                    }
-                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    applyDamageToPlayerIfVulnerable(1);
                     break;
                 }
             }
         }
+
+        if (player.invincibilityTimer <= 0.0f) {
+            checkLaserCollisions();
+        }
 #else
         for (const auto& enemy : basicEnemies) {
             if (playerRect.intersects(enemy.getCollider())) {
-                if (player.health > 0) {
-                    player.health -= 1;
-                    notifyPlayerDamageHaptics();
-                }
-                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                applyDamageToPlayerIfVulnerable(1);
                 break;
             }
         }
@@ -651,11 +768,7 @@ void Game::update() {
         if (player.invincibilityTimer <= 0.0f) {
             for (const auto& enemy : rangedEnemies) {
                 if (playerRect.intersects(enemy.getCollider())) {
-                    if (player.health > 0) {
-                        player.health -= 1;
-                        notifyPlayerDamageHaptics();
-                    }
-                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    applyDamageToPlayerIfVulnerable(1);
                     break;
                 }
             }
@@ -665,17 +778,18 @@ void Game::update() {
             for (const auto& b : bosses) {
                 if (!b.active || !b.activated) continue;
                 if (playerRect.intersects(b.getCollider())) {
-                    if (player.health > 0) {
-                        player.health -= 1;
-                        notifyPlayerDamageHaptics();
-                    }
-                    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+                    applyDamageToPlayerIfVulnerable(1);
                     break;
                 }
             }
         }
+
+        if (player.invincibilityTimer <= 0.0f) {
+            checkLaserCollisions();
+        }
 #endif
     }
+    GAME_TRACE_MSG("D");
     
     // Update all enemy projectiles
 #ifdef PLATFORM_PICO
@@ -742,27 +856,43 @@ void Game::update() {
         portalFrame = (portalFrame + 1) % 12;
     }
 
-    if (bossSeanSpritesheet >= 0 && levelHasBoss) {
-        bool anyBossVisible = false;
+    if (levelHasBoss) {
+        bool anyLaserBossVisible = false;
+        bool anyNonLaserBossVisible = false;
 #ifdef PLATFORM_PICO
         for (size_t i = 0; i < bosses.size(); i++) {
             if (!bosses.isActive(i)) {
                 continue;
             }
-            if (bosses[i].active && bosses[i].activated) {
-                anyBossVisible = true;
-                break;
+            if (!bosses[i].active || !bosses[i].activated) {
+                continue;
+            }
+            if (bosses[i].type == BossType::LASER) {
+                anyLaserBossVisible = true;
+            } else {
+                anyNonLaserBossVisible = true;
             }
         }
 #else
         for (const auto& b : bosses) {
-            if (b.active && b.activated) {
-                anyBossVisible = true;
-                break;
+            if (!b.active || !b.activated) {
+                continue;
+            }
+            if (b.type == BossType::LASER) {
+                anyLaserBossVisible = true;
+            } else {
+                anyNonLaserBossVisible = true;
             }
         }
 #endif
-        if (anyBossVisible) {
+        if (anyLaserBossVisible && bossLaserSpritesheet >= 0) {
+            bossLaserAnimTimer += dt;
+            if (bossLaserAnimTimer >= kRobertHunterAnimFrameSec) {
+                bossLaserAnimTimer -= kRobertHunterAnimFrameSec;
+                bossLaserFrame = (bossLaserFrame + 1) % kRobertHunterFrameCount;
+            }
+        }
+        if (anyNonLaserBossVisible && bossSeanSpritesheet >= 0) {
             bossSeanAnimTimer += dt;
             if (bossSeanAnimTimer >= 0.1f) {
                 bossSeanAnimTimer -= 0.1f;
@@ -851,13 +981,7 @@ void Game::update() {
         if (!enemyProjectiles.isActive(i)) continue;
         if (enemyProjectiles[i].getCollider().intersects(player.getCollider())) {
             enemyProjectiles[i].shouldDestroy = true;
-            if (player.invincibilityTimer <= 0.0f) {
-                if (player.health > 0) {
-                    player.health -= 1;
-                    notifyPlayerDamageHaptics();
-                }
-                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
-            }
+            applyDamageToPlayerIfVulnerable(1);
         }
     }
     
@@ -866,6 +990,9 @@ void Game::update() {
         if (healthPacks[i].active && healthPacks[i].getCollider().intersects(player.getCollider())) {
             player.health += 1;
             healthPacks[i].active = false;
+            if (player.health > 0) {
+                deathLevelCaptured = false;
+            }
         }
     }
     
@@ -880,13 +1007,7 @@ void Game::update() {
     for (auto& projectile : enemyProjectiles) {
         if (projectile.getCollider().intersects(player.getCollider())) {
             projectile.shouldDestroy = true;
-            if (player.invincibilityTimer <= 0.0f) {
-                if (player.health > 0) {
-                    player.health -= 1;
-                    notifyPlayerDamageHaptics();
-                }
-                player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
-            }
+            applyDamageToPlayerIfVulnerable(1);
         }
     }
     
@@ -894,6 +1015,9 @@ void Game::update() {
         if (healthPack.active && healthPack.getCollider().intersects(player.getCollider())) {
             player.health += 1;
             healthPack.active = false;
+            if (player.health > 0) {
+                deathLevelCaptured = false;
+            }
         }
     }
     
@@ -934,6 +1058,7 @@ void Game::update() {
     for (size_t i = 0; i < bosses.size(); i++) {
         if (bosses.isActive(i) && !bosses[i].active) {
             arenaWalls.clear();
+            lasers.clear();
             bosses.free(i);
         }
     }
@@ -977,34 +1102,130 @@ void Game::update() {
         );
         if (removedBoss) {
             arenaWalls.clear();
+            lasers.clear();
         }
     }
 #endif
-    
-    // Camera follow
-    camera.follow(player, level);
-    
-    // Check portal collisions
-    checkPortalCollisions();
-    
-    if (player.health <= 0) {
-        state = GameState::GameOver;
-        gameOverFrame = 0;
-        gameOverAnimTimer = 0.0f;
-    }
+    return false;
 }
 
+void Game::updateLevelState() {
+    camera.follow(player, level);
+}
+
+void Game::update() {
+    timer->update();
+    input->update();
+
+    float dt = timer->getDeltaTime();
+
+    if (input->wasJustPressed(Button::MenuBack)) {
+        state = GameState::MainMenu;
+        return;
+    }
+
+    if (state == GameState::MainMenu) {
+        const Rect startBtn = menuStartButtonRect();
+        int mx = 0;
+        int my = 0;
+        input->getMouseLogicalPosition(mx, my);
+        if (input->wasJustPressed(Button::MenuConfirm) ||
+            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, startBtn))) {
+            state = GameState::Playing;
+            restartCurrentLevel();
+        }
+        return;
+    }
+    if (state == GameState::GameOver) {
+        if (gameOverSpritesheet >= 0) {
+            gameOverAnimTimer += dt;
+            if (gameOverAnimTimer >= 0.1f) {
+                gameOverAnimTimer -= 0.1f;
+                gameOverFrame = (gameOverFrame + 1) % 12;
+            }
+        }
+        const Rect retryBtn = gameOverRetryButtonRect();
+        int mx = 0;
+        int my = 0;
+        input->getMouseLogicalPosition(mx, my);
+        if (input->wasJustPressed(Button::MenuConfirm) ||
+            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, retryBtn))) {
+            state = GameState::Playing;
+            retryAfterGameOver();
+        }
+        return;
+    }
+
+    // Playing — order: input → movement → collisions (may kill / pit) → portals only if still alive & playing.
+    ++debugUpdateFrameIndex;
+
+    processPlayerInput(dt);
+    processPlayerMovement(dt);
+    if (resolveCollisions(dt)) {
+        return;
+    }
+    if (state == GameState::GameOver) {
+        return;
+    }
+    checkPortalCollisions();
+    updateLevelState();
+}
 void Game::notifyPlayerDamageHaptics() {
     haptics->trigger(HapticEffect::Medium, 100);
 }
 
+void Game::applyDamageToPlayerIfVulnerable(int amount) {
+    if (state == GameState::GameOver) {
+        return;
+    }
+    if (player.invincibilityTimer > 0.0f) {
+        return;
+    }
+    if (player.health > 0) {
+        player.health -= amount;
+        notifyPlayerDamageHaptics();
+    }
+    player.invincibilityTimer = Player::INVINCIBILITY_DURATION;
+    if (player.health <= 0 && !deathLevelCaptured) {
+        strncpy(deathLevelName, currentLevelName, sizeof(deathLevelName) - 1);
+        deathLevelName[sizeof(deathLevelName) - 1] = '\0';
+        deathLevelCaptured = true;
+        beginGameOver();
+    }
+}
+
 void Game::checkPortalCollisions() {
     Rect playerRect = player.getCollider();
-    
+
+    // "levelComplete" equivalent stays true while standing in the portal — arm only after leaving hitbox
+    bool touchingAnyPortal = false;
 #ifdef PLATFORM_PICO
     const Portal* portals = level.getPortals();
     uint8_t portalCount = level.getPortalCount();
-    
+    for (uint8_t i = 0; i < portalCount; i++) {
+        if (playerRect.intersects(portals[i].bounds)) {
+            touchingAnyPortal = true;
+            break;
+        }
+    }
+#else
+    const std::vector<Portal>& portals = level.getPortals();
+    for (const Portal& portal : portals) {
+        if (playerRect.intersects(portal.bounds)) {
+            touchingAnyPortal = true;
+            break;
+        }
+    }
+#endif
+    if (!touchingAnyPortal) {
+        portalTransitionArmed = true;
+        return;
+    }
+    if (!portalTransitionArmed) {
+        return;
+    }
+
+#ifdef PLATFORM_PICO
     for (uint8_t i = 0; i < portalCount; i++) {
         if (playerRect.intersects(portals[i].bounds)) {
             bool hasObjectives = false;
@@ -1020,23 +1241,30 @@ void Game::checkPortalCollisions() {
             if (hasAliveBoss()) {
                 return;
             }
-            loadLevel(portals[i].targetLevel);
+            portalTransitionArmed = false;
+            if (!loadLevel(portals[i].targetLevel)) {
+                portalTransitionArmed = true;
+            }
             break;
         }
     }
 #else
-    const std::vector<Portal>& portals = level.getPortals();
-    
-    for (const Portal& portal : portals) {
-        if (playerRect.intersects(portal.bounds)) {
-            if (!objectives.empty() && !levelObjectiveCollected) {
-                return;
+    {
+        const std::vector<Portal>& portalsForLoad = level.getPortals();
+        for (const Portal& portal : portalsForLoad) {
+            if (playerRect.intersects(portal.bounds)) {
+                if (!objectives.empty() && !levelObjectiveCollected) {
+                    return;
+                }
+                if (hasAliveBoss()) {
+                    return;
+                }
+                portalTransitionArmed = false;
+                if (!loadLevel(portal.targetLevel)) {
+                    portalTransitionArmed = true;
+                }
+                break;
             }
-            if (hasAliveBoss()) {
-                return;
-            }
-            loadLevel(portal.targetLevel);
-            break;
         }
     }
 #endif
@@ -1108,6 +1336,186 @@ void Game::updateSummonerBoss(BossEnemy& boss, float dt) {
     }
 }
 
+void Game::updateLaserBoss(BossEnemy& boss, float dt) {
+    if (boss.type != BossType::LASER || !boss.active || !boss.activated) {
+        return;
+    }
+    if (!boss.laserOrderInitialized) {
+        boss.laserRngState ^= static_cast<uint32_t>(fixedToFloat(boss.position.x) * 17.0f);
+        boss.laserRngState ^= static_cast<uint32_t>(fixedToFloat(boss.position.y) * 131.0f);
+        for (int i = 0; i < 5; ++i) {
+            boss.laserWaypointOrder[i] = static_cast<uint8_t>(i);
+        }
+        shuffleLaserWaypointOrder(boss);
+        boss.laserWaypointIndex = 0;
+        boss.laserOrderInitialized = true;
+    }
+
+    const Vec2& target = kLaserWaypoints[boss.laserWaypointOrder[boss.laserWaypointIndex % 5]];
+    float px = fixedToFloat(boss.position.x);
+    float py = fixedToFloat(boss.position.y);
+    float tx = fixedToFloat(target.x);
+    float ty = fixedToFloat(target.y);
+    float dx = tx - px;
+    float dy = ty - py;
+    float distSq = dx * dx + dy * dy;
+    const float thresh = kLaserBossWaypointArrivePx;
+    if (distSq <= thresh * thresh) {
+        boss.laserWaypointIndex++;
+        if (boss.laserWaypointIndex >= 5) {
+            for (int i = 0; i < 5; ++i) {
+                boss.laserWaypointOrder[i] = static_cast<uint8_t>(i);
+            }
+            shuffleLaserWaypointOrder(boss);
+            boss.laserWaypointIndex = 0;
+        }
+    } else {
+        float len = std::sqrt(distSq);
+        if (len >= 1e-4f) {
+            float step = kLaserBossMoveSpeed * dt;
+            if (step >= len) {
+                boss.position = target;
+            } else {
+                px += (dx / len) * step;
+                py += (dy / len) * step;
+                boss.position = Vec2(px, py);
+            }
+        }
+    }
+
+    boss.updateLaser(dt, level, player, *this);
+}
+
+void Game::spawnLaser(BossEnemy& boss, const Vec2& origin, float dirX, float dirY) {
+    float cx = fixedToFloat(boss.position.x + FIXED_DIV(BossEnemy::WIDTH, TO_FIXED(2.0f)));
+    float cy = fixedToFloat(boss.position.y + FIXED_DIV(BossEnemy::HEIGHT, TO_FIXED(2.0f)));
+    const float hw = BossEnemy::LASER_ARENA_HALF_W_PX;
+    const float hh = BossEnemy::LASER_ARENA_HALF_H_PX;
+
+    Laser built;
+    built = Laser();
+    int pc = 0;
+    if (!buildLaserPath(origin, dirX, dirY, level, cx, cy, hw, hh, Laser::MAX_BOUNCES, built.points, pc)) {
+        return;
+    }
+    built.pointCount = static_cast<uint8_t>(pc);
+    built.active = true;
+    built.age = 0.0f;
+
+#ifdef PLATFORM_PICO
+    Laser* slot = lasers.allocate();
+    if (!slot) {
+        return;
+    }
+    *slot = built;
+#else
+    lasers.push_back(built);
+#endif
+}
+
+bool Game::hasActiveLaser() const {
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < lasers.size(); i++) {
+        if (!lasers.isActive(i)) {
+            continue;
+        }
+        if (lasers[i].active && lasers[i].age < lasers[i].totalLifetime) {
+            return true;
+        }
+    }
+#else
+    for (const auto& l : lasers) {
+        if (l.active && l.age < l.totalLifetime) {
+            return true;
+        }
+    }
+#endif
+    return false;
+}
+
+void Game::updateLasers(float dt) {
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < lasers.size(); i++) {
+        if (!lasers.isActive(i)) {
+            continue;
+        }
+        lasers[i].age += dt;
+        if (lasers[i].age >= lasers[i].totalLifetime) {
+            lasers.free(i);
+        }
+    }
+#else
+    for (auto it = lasers.begin(); it != lasers.end();) {
+        it->age += dt;
+        if (it->age >= it->totalLifetime) {
+            it = lasers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+#endif
+}
+
+void Game::renderLasers() {
+    int camX = camera.getOffsetX();
+    int camY = camera.getOffsetY();
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < lasers.size(); i++) {
+        if (!lasers.isActive(i)) {
+            continue;
+        }
+        if (lasers[i].active) {
+            renderLaser(lasers[i], renderer, camX, camY);
+        }
+    }
+#else
+    for (const auto& laser : lasers) {
+        if (laser.active) {
+            renderLaser(laser, renderer, camX, camY);
+        }
+    }
+#endif
+}
+
+void Game::checkLaserCollisions() {
+    if (player.invincibilityTimer > 0.0f) {
+        return;
+    }
+    GAME_TRACE_MSG("E");
+    constexpr float kLaserHitRadiusSq = 3.0f * 3.0f;
+    Rect pr = player.getCollider();
+    float pxf = fixedToFloat(pr.x) + fixedToFloat(pr.width) * 0.5f;
+    float pyf = fixedToFloat(pr.y) + fixedToFloat(pr.height) * 0.5f;
+    Vec2 pcent;
+    pcent.x = floatToFixed(pxf);
+    pcent.y = floatToFixed(pyf);
+
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < lasers.size(); i++) {
+        if (!lasers.isActive(i)) {
+            continue;
+        }
+        const Laser& laser = lasers[i];
+#else
+    for (const auto& laser : lasers) {
+#endif
+        if (!laser.active || laser.age < laser.telegraphDuration || laser.pointCount < 2) {
+            continue;
+        }
+        for (int s = 0; s < static_cast<int>(laser.pointCount) - 1; ++s) {
+            if (distanceSqPointToSegment(pcent, laser.points[s], laser.points[s + 1]) < kLaserHitRadiusSq) {
+                applyDamageToPlayerIfVulnerable(1);
+                GAME_TRACE_MSG("F");
+                return;
+            }
+        }
+#ifdef PLATFORM_PICO
+    }
+#else
+    }
+#endif
+}
+
 void Game::rebuildArenaWallsFromActivatedBosses() {
     arenaWalls.clear();
 #ifdef PLATFORM_PICO
@@ -1122,9 +1530,12 @@ void Game::rebuildArenaWallsFromActivatedBosses() {
         Rect w[4];
         b.computeArenaWalls(w);
         for (int k = 0; k < 4; k++) {
+            if (b.type == BossType::LASER && k == 3) {
+                continue;
+            }
             Rect* slot = arenaWalls.allocate();
             if (!slot) {
-                return;
+                continue;
             }
             *slot = w[k];
         }
@@ -1137,18 +1548,48 @@ void Game::rebuildArenaWallsFromActivatedBosses() {
         Rect w[4];
         b.computeArenaWalls(w);
         for (int k = 0; k < 4; k++) {
+            if (b.type == BossType::LASER && k == 3) {
+                continue;
+            }
             arenaWalls.push_back(w[k]);
         }
     }
 #endif
 }
 
+void Game::applyLaserArenaBottomTeleport() {
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) {
+            continue;
+        }
+        BossEnemy& b = bosses[i];
+#else
+    for (BossEnemy& b : bosses) {
+#endif
+        if (!b.active || !b.activated || b.type != BossType::LASER) {
+            continue;
+        }
+        Rect w[4];
+        b.computeArenaWalls(w);
+        if (player.getCollider().intersects(w[3])) {
+            player.position = Vec2(kLaserArenaBottomRecoverX, kLaserArenaBottomRecoverY);
+            player.velocity = Vec2(0.0f, 0.0f);
+            player.setGrounded(true);
+#ifdef PLATFORM_PICO
+            camera.follow(player, level);
+#endif
+            break;
+        }
+    }
+}
+
 void Game::resolveArenaWallsForPlayer() {
 #ifdef PLATFORM_PICO
-    Rect arenaBuf[8];
+    Rect arenaBuf[12];
     size_t an = 0;
     for (size_t i = 0; i < arenaWalls.size(); i++) {
-        if (arenaWalls.isActive(i) && an < 8) {
+        if (arenaWalls.isActive(i) && an < 12) {
             arenaBuf[an++] = arenaWalls[i];
         }
     }
@@ -1196,7 +1637,8 @@ void Game::renderBossHealthBar() {
     const int barY = sh - marginBottom - barH;
     const int barX = (sw - barW) / 2;
 
-    const char* name = "Sean Speziale";
+    const char* name =
+        (barBoss->type == BossType::LASER) ? "Robert Hunter" : "Sean Speziale";
 #ifdef PLATFORM_PICO
     const int nameW = renderer->measureTextWidthScaled(name, kBossNameScale);
     renderer->drawTextScaled(name, (sw - nameW) / 2, barY - labelSpace, Color(255, 255, 255), kBossNameScale);
@@ -1342,7 +1784,14 @@ void Game::renderPlayingWorld() {
         Rect dstRect = bosses[i].getCollider();
         dstRect.x -= TO_FIXED(camX);
         dstRect.y -= TO_FIXED(camY);
-        if (bossSeanSpritesheet >= 0 && levelHasBoss) {
+        if (bosses[i].type == BossType::LASER) {
+            if (bossLaserSpritesheet >= 0) {
+                renderer->drawSpriteFrame(bossLaserSpritesheet, bossLaserFrame, kRobertHunterFrameW, kRobertHunterFrameH,
+                                          dstRect, false);
+            } else {
+                renderer->drawRect(dstRect, Color(255, 0, 0), true);
+            }
+        } else if (bossSeanSpritesheet >= 0 && levelHasBoss) {
             renderer->drawSpriteFrame(bossSeanSpritesheet, bossSeanFrame, 32, 32, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(255, 0, 255), true);
@@ -1378,13 +1827,22 @@ void Game::renderPlayingWorld() {
         Rect dstRect = boss.getCollider();
         dstRect.x -= camX;
         dstRect.y -= camY;
-        if (bossSeanSpritesheet >= 0 && levelHasBoss) {
+        if (boss.type == BossType::LASER) {
+            if (bossLaserSpritesheet >= 0) {
+                renderer->drawSpriteFrame(bossLaserSpritesheet, bossLaserFrame, kRobertHunterFrameW, kRobertHunterFrameH,
+                                          dstRect, false);
+            } else {
+                renderer->drawRect(dstRect, Color(255, 0, 0), true);
+            }
+        } else if (bossSeanSpritesheet >= 0 && levelHasBoss) {
             renderer->drawSpriteFrame(bossSeanSpritesheet, bossSeanFrame, 32, 32, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(255, 0, 255), true);
         }
     }
 #endif
+
+    renderLasers();
     
     // Draw health packs
 #ifdef PLATFORM_PICO
@@ -1422,7 +1880,7 @@ void Game::renderPlayingWorld() {
     for (size_t i = 0; i < enemyProjectiles.size(); i++) {
         if (!enemyProjectiles.isActive(i)) continue;
         
-        Rect dstRect = enemyProjectiles[i].getCollider();
+        Rect dstRect = enemyProjectilePicoDrawRect(enemyProjectiles[i]);
         dstRect.x -= TO_FIXED(camX);
         dstRect.y -= TO_FIXED(camY);
         

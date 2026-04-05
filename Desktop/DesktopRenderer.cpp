@@ -60,6 +60,11 @@ void DesktopRenderer::drawRect(const Rect& rect, Color color, bool filled) {
     }
 }
 
+void DesktopRenderer::drawLine(int x0, int y0, int x1, int y1, Color color) {
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderDrawLine(renderer, x0, y0, x1, y1);
+}
+
 void DesktopRenderer::drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                                 int cameraOffsetX, int cameraOffsetY) {
     if (tileId == -1) return;  // Don't draw air

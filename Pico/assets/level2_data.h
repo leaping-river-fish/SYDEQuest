@@ -64,7 +64,6 @@ const EnemySpawnData level2_enemies[] = {
     {480.0f, 720.0f, LevelEnemyType::BASIC},
     {640.0f, 720.0f, LevelEnemyType::BASIC},
     {800.0f, 720.0f, LevelEnemyType::BASIC},
-    {960.0f, 720.0f, LevelEnemyType::BASIC},
     {480.0f, 576.0f, LevelEnemyType::BASIC},
     {560.0f, 576.0f, LevelEnemyType::BASIC},
     {640.0f, 576.0f, LevelEnemyType::BASIC},
@@ -83,7 +82,7 @@ const SpawnData level2_healthPacks[] = {
 };
 
 const PortalData level2_portals[] = {
-    {960.0f, 720.0f, 32.0f, 32.0f, 2, 48.0f, 320.0f},
+    {960.0f, 704.0f, 32.0f, 32.0f, 2, 48.0f, 320.0f},
 };
 
 const ObjectiveSpawnData level2_objectives[] = {
@@ -93,7 +92,7 @@ const ObjectiveSpawnData level2_objectives[] = {
 const LevelMetadata level2_metadata = {
     .spawn = {48.0f, 720.0f},
     .enemies = level2_enemies,
-    .enemyCount = 16,
+    .enemyCount = 15,
     .healthPacks = level2_healthPacks,
     .healthPackCount = 2,
     .portals = level2_portals,

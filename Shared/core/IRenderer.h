@@ -15,6 +15,8 @@ public:
     virtual void clear(Color color) = 0;
     
     virtual void drawRect(const Rect& rect, Color color, bool filled) = 0;
+    /** World/screen-space line in pixel coordinates (1 pixel wide). */
+    virtual void drawLine(int x0, int y0, int x1, int y1, Color color) = 0;
     virtual void drawTile(int tileX, int tileY, int8_t tileId, int terrainSpritesheet,
                           int cameraOffsetX, int cameraOffsetY) = 0;
     
