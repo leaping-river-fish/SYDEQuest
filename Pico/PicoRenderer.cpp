@@ -22,7 +22,11 @@
 #include "assets/title_sprite.h"
 #include "assets/boss_sean_sprite.h"
 #include "assets/robert_hunter_sprite.h"
+#include "assets/calvin_young_sprite.h"
 #include "assets/game_over_sprite.h"
+#include "assets/rustball_sprite.h"
+#include "assets/rust_shrapnel_sprite.h"
+#include "assets/trophy_sprite.h"
 #include "board_config.h"
 #include <algorithm>
 #include <cassert>
@@ -100,9 +104,18 @@ static_assert(sizeof(boss_sean_sprite) / sizeof(boss_sean_sprite[0]) ==
 static_assert(sizeof(robert_hunter_sprite) / sizeof(robert_hunter_sprite[0]) ==
               static_cast<size_t>(ROBERT_HUNTER_SPRITE_FRAME_COUNT) * ROBERT_HUNTER_SPRITE_FRAME_WIDTH *
                   ROBERT_HUNTER_SPRITE_FRAME_HEIGHT);
+static_assert(sizeof(calvin_young_sprite) / sizeof(calvin_young_sprite[0]) ==
+              static_cast<size_t>(CALVIN_YOUNG_SPRITE_FRAME_COUNT) * CALVIN_YOUNG_SPRITE_FRAME_WIDTH *
+                  CALVIN_YOUNG_SPRITE_FRAME_HEIGHT);
 static_assert(sizeof(game_over_sprite) / sizeof(game_over_sprite[0]) ==
               static_cast<size_t>(GAME_OVER_SPRITE_FRAME_COUNT) * GAME_OVER_SPRITE_FRAME_WIDTH *
                   GAME_OVER_SPRITE_FRAME_HEIGHT);
+static_assert(sizeof(rustball_sprite) / sizeof(rustball_sprite[0]) ==
+              static_cast<size_t>(RUSTBALL_SPRITE_WIDTH) * RUSTBALL_SPRITE_HEIGHT);
+static_assert(sizeof(rust_shrapnel_sprite) / sizeof(rust_shrapnel_sprite[0]) ==
+              static_cast<size_t>(RUST_SHRAPNEL_SPRITE_WIDTH) * RUST_SHRAPNEL_SPRITE_HEIGHT);
+static_assert(sizeof(trophy_sprite) / sizeof(trophy_sprite[0]) ==
+              static_cast<size_t>(TROPHY_SPRITE_WIDTH) * TROPHY_SPRITE_HEIGHT);
 
 PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) {
     // Physical panel is 240x320 portrait; landscape (320x240) is applied after begin() via setRotation
@@ -147,7 +160,7 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
     gpio_set_function(bl_pin, GPIO_FUNC_PWM);
     pwm_set_gpio_level(bl_pin, 65535);
     
-    // IDs match Game::init loadTexture order (0..21)
+    // IDs match Game::init loadTexture order (0..25)
     registerSprite(0, player_sprite, PLAYER_SPRITE_FRAME_WIDTH, PLAYER_SPRITE_FRAME_HEIGHT, PLAYER_SPRITE_FRAME_COUNT);
     registerSprite(1, projectile_left_sprite, PROJECTILE_LEFT_SPRITE_FRAME_WIDTH, PROJECTILE_LEFT_SPRITE_FRAME_HEIGHT, PROJECTILE_LEFT_SPRITE_FRAME_COUNT);
     registerSprite(2, projectile_right_sprite, PROJECTILE_RIGHT_SPRITE_FRAME_WIDTH, PROJECTILE_RIGHT_SPRITE_FRAME_HEIGHT, PROJECTILE_RIGHT_SPRITE_FRAME_COUNT);
@@ -169,10 +182,15 @@ PicoRenderer::PicoRenderer() : spriteCount(0), bl_pin(13), framebuffer(nullptr) 
     registerSprite(18, title_sprite, TITLE_SPRITE_WIDTH, TITLE_SPRITE_HEIGHT, 1);
     registerSprite(19, boss_sean_sprite, BOSS_SEAN_SPRITE_FRAME_WIDTH, BOSS_SEAN_SPRITE_FRAME_HEIGHT,
                    BOSS_SEAN_SPRITE_FRAME_COUNT);
-    registerSprite(20, game_over_sprite, GAME_OVER_SPRITE_FRAME_WIDTH, GAME_OVER_SPRITE_FRAME_HEIGHT,
-                   GAME_OVER_SPRITE_FRAME_COUNT);
-    registerSprite(21, robert_hunter_sprite, ROBERT_HUNTER_SPRITE_FRAME_WIDTH, ROBERT_HUNTER_SPRITE_FRAME_HEIGHT,
+    registerSprite(20, robert_hunter_sprite, ROBERT_HUNTER_SPRITE_FRAME_WIDTH, ROBERT_HUNTER_SPRITE_FRAME_HEIGHT,
                    ROBERT_HUNTER_SPRITE_FRAME_COUNT);
+    registerSprite(21, calvin_young_sprite, CALVIN_YOUNG_SPRITE_FRAME_WIDTH, CALVIN_YOUNG_SPRITE_FRAME_HEIGHT,
+                   CALVIN_YOUNG_SPRITE_FRAME_COUNT);
+    registerSprite(22, game_over_sprite, GAME_OVER_SPRITE_FRAME_WIDTH, GAME_OVER_SPRITE_FRAME_HEIGHT,
+                   GAME_OVER_SPRITE_FRAME_COUNT);
+    registerSprite(23, rustball_sprite, RUSTBALL_SPRITE_WIDTH, RUSTBALL_SPRITE_HEIGHT, 1);
+    registerSprite(24, rust_shrapnel_sprite, RUST_SHRAPNEL_SPRITE_WIDTH, RUST_SHRAPNEL_SPRITE_HEIGHT, 1);
+    registerSprite(25, trophy_sprite, TROPHY_SPRITE_WIDTH, TROPHY_SPRITE_HEIGHT, 1);
 }
 
 PicoRenderer::~PicoRenderer() {
@@ -732,7 +750,11 @@ int PicoRenderer::loadTexture(const char* path) {
     if (filenameEqCi(base, "Boss.png")) return 17;
     if (filenameEqCi(base, "SYDEQuest.png")) return 18;
     if (filenameEqCi(base, "SeanSpeziale.png")) return 19;
-    if (filenameEqCi(base, "GameOver.png")) return 20;
-    if (filenameEqCi(base, "Robert Hunter.png")) return 21;
+    if (filenameEqCi(base, "Robert Hunter.png")) return 20;
+    if (filenameEqCi(base, "Calvin Young.png")) return 21;
+    if (filenameEqCi(base, "GameOver.png")) return 22;
+    if (filenameEqCi(base, "Rustball.png")) return 23;
+    if (filenameEqCi(base, "RustShrapnel.png")) return 24;
+    if (filenameEqCi(base, "Trophy.png")) return 25;
     return -1;
 }

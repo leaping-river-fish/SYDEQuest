@@ -1,5 +1,13 @@
 #pragma once
 #include "../../core/types.h"
+#include <cstdint>
+
+/** Ranged enemies use Integral sprite; bullet-hell boss uses Rustball / RustShrapnel art. */
+enum class EnemyProjectileKind : uint8_t {
+    Ranged,
+    BulletHellMain,
+    BulletHellShard
+};
 
 class EnemyProjectile {
 public:
@@ -26,10 +34,25 @@ public:
     // Animation state
     int currentFrame;
     float animationTimer;
-    
-    EnemyProjectile() : position(0.0f, 0.0f), velocity(0.0f, 0.0f), lifetime(0.0f), 
-                       shouldDestroy(false), movingRight(false), currentFrame(0), animationTimer(0.0f) {}
-    EnemyProjectile(Vec2 startPos, Vec2 direction);
+
+    /** If > 0, on solid tile hit spawn this many child projectiles (boss bullet hell); children use 0. */
+    int shrapnelCount;
+
+    EnemyProjectileKind kind;
+
+    EnemyProjectile()
+        : position(0.0f, 0.0f),
+          velocity(0.0f, 0.0f),
+          lifetime(0.0f),
+          shouldDestroy(false),
+          movingRight(false),
+          currentFrame(0),
+          animationTimer(0.0f),
+          shrapnelCount(0),
+          kind(EnemyProjectileKind::Ranged) {}
+
+    EnemyProjectile(Vec2 startPos, Vec2 direction, int shrapnelPieces = 0,
+                    EnemyProjectileKind projectileKind = EnemyProjectileKind::Ranged);
     
     void update(float deltaTime);
     Rect getCollider() const;

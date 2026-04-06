@@ -43,6 +43,21 @@ constexpr int kRobertHunterFrameCount = 12;
 /** Seconds per animation frame (~6.25 FPS; Sean boss uses 0.1s = 10 FPS). */
 constexpr float kRobertHunterAnimFrameSec = 0.16f;
 
+/** Calvin Young sheet (4×3); must match assets/Calvin Young.png and Pico/assets/calvin_young_sprite.h. */
+constexpr int kCalvinYoungFrameW = 32;
+constexpr int kCalvinYoungFrameH = 32;
+constexpr float kCalvinYoungAnimFrameSec = 0.12f;
+
+/** Single-frame trophy; must match assets/Trophy.png and Pico/assets/trophy_sprite.h. */
+constexpr int kTrophyFrameW = 32;
+constexpr int kTrophyFrameH = 32;
+
+/** Single-frame Rustball / RustShrapnel; must match assets and Pico rust*_sprite.h. */
+constexpr int kRustballFrameW = 16;
+constexpr int kRustballFrameH = 16;
+constexpr int kRustShrapnelFrameW = 8;
+constexpr int kRustShrapnelFrameH = 8;
+
 /** Case-insensitive substring (ASCII); needle must be lower-case. */
 bool pathContainsInsensitive(const char* haystack, const char* needleLower) {
     if (!haystack || !needleLower) {
@@ -111,6 +126,16 @@ void shuffleLaserWaypointOrder(BossEnemy& boss) {
         std::swap(boss.laserWaypointOrder[i], boss.laserWaypointOrder[j]);
     }
 }
+
+/** Row 0 idle / vulnerable / between; row 2 while dashing. */
+int calvinBossSpriteFrame(const BossEnemy& boss, int calvinAnimPhase) {
+    const int f = calvinAnimPhase % 4;
+    if (boss.getBulletHellState() == BulletHellState::ChargePhase &&
+        boss.getBulletHellChargeSub() == BulletHellChargeSub::Dash) {
+        return 8 + f;
+    }
+    return f;
+}
 }  // namespace
 
 #ifndef PLATFORM_PICO
@@ -132,6 +157,20 @@ inline bool playerWithinBossActivationSq(const Vec2& playerPos, const Vec2& boss
     return d2 < r2;
 }
 #endif
+
+/** LASER bottom strip w[3]: Rect::intersects fails when feet sit exactly on the inner floor (feet y == band.y),
+ *  because intersection requires positive overlap on every axis. Use fixed_t AABB vs band expanded by epsilon. */
+static bool playerFeetOverlapLaserArenaBottom(const Rect& playerRect, const Rect& bottomBand) {
+    const fixed_t eps = TO_FIXED(1.0f);
+    if (playerRect.x + playerRect.width <= bottomBand.x || playerRect.x >= bottomBand.x + bottomBand.width) {
+        return false;
+    }
+    const fixed_t expandTop = bottomBand.y - eps;
+    const fixed_t expandBot = bottomBand.y + bottomBand.height + eps;
+    const fixed_t pTop = playerRect.y;
+    const fixed_t pBot = playerRect.y + playerRect.height;
+    return !(pBot <= expandTop || pTop >= expandBot);
+}
 
 Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
     : renderer(r), input(i), haptics(h), timer(t),
@@ -157,7 +196,14 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       titleSpritesheet(-1),
       bossSeanSpritesheet(-1),
       bossLaserSpritesheet(-1),
+      bossCalvinSpritesheet(-1),
       gameOverSpritesheet(-1),
+      rustballSpritesheet(-1),
+      rustShrapnelSpritesheet(-1),
+      trophySpritesheet(-1),
+      chargeWarningActive(false),
+      chargeWarnFrom(),
+      chargeWarnTo(),
       hpUIFrame(0),
       hpUIAnimTimer(0.0f),
       portalFrame(0),
@@ -166,6 +212,8 @@ Game::Game(IRenderer* r, IInput* i, IHaptics* h, ITimer* t)
       bossSeanAnimTimer(0.0f),
       bossLaserFrame(0),
       bossLaserAnimTimer(0.0f),
+      bossCalvinFrame(0),
+      bossCalvinAnimTimer(0.0f),
       gameOverFrame(0),
       gameOverAnimTimer(0.0f),
       levelObjectiveCollected(false),
@@ -208,7 +256,11 @@ void Game::init() {
     titleSpritesheet = renderer->loadTexture("../assets/SYDEQuest.png");
     bossSeanSpritesheet = renderer->loadTexture("../assets/SeanSpeziale.png");
     bossLaserSpritesheet = renderer->loadTexture("../assets/Robert Hunter.png");
+    bossCalvinSpritesheet = renderer->loadTexture("../assets/Calvin Young.png");
     gameOverSpritesheet = renderer->loadTexture("../assets/GameOver.png");
+    rustballSpritesheet = renderer->loadTexture("../assets/Rustball.png");
+    rustShrapnelSpritesheet = renderer->loadTexture("../assets/RustShrapnel.png");
+    trophySpritesheet = renderer->loadTexture("../assets/Trophy.png");
 
     state = GameState::MainMenu;
 }
@@ -291,6 +343,7 @@ void Game::resetAndSpawnEntitiesPico() {
         for (size_t i = 0; i < bosses.size(); i++) {
             if (!bosses.isActive(i)) continue;
             bosses[i].activated = true;
+            bosses[i].postActivationIdleRemaining = BossEnemy::POST_ACTIVATION_IDLE_SEC;
         }
     }
 
@@ -395,6 +448,7 @@ bool Game::loadLevel(const char* levelName) {
     if (kDebugForceBossActivated) {
         for (auto& boss : bosses) {
             boss.activated = true;
+            boss.postActivationIdleRemaining = BossEnemy::POST_ACTIVATION_IDLE_SEC;
         }
     }
 #endif
@@ -440,6 +494,7 @@ void Game::beginGameOver() {
     state = GameState::GameOver;
     gameOverFrame = 0;
     gameOverAnimTimer = 0.0f;
+    resetBossArenaOnPlayerDeathOrRespawn();
 }
 
 void Game::beginYouPassed() {
@@ -451,6 +506,7 @@ void Game::respawnPlayerAtCurrentLevelStart() {
     // failed or flaky second reload can wipe tiles while leaving stale metadata, or break spawn/collision so it
     // feels like you're sent "back to the start". The loaded Level already matches the current stage — use SPAWN.
     // (Pico: loadLevel also maps unknown paths to embedded Level 1; teleport avoids that too.)
+    resetBossArenaOnPlayerDeathOrRespawn();
     player.position = level.getSpawnPoint();
     player.velocity = Vec2(0.0f, 0.0f);
     player.setGrounded(false);
@@ -495,6 +551,7 @@ void Game::processPlayerMovement(float dt) {
         if (!boss.active || boss.activated) continue;
         if (playerWithinBossActivationSq(player.position, boss.position)) {
             boss.activated = true;
+            boss.postActivationIdleRemaining = BossEnemy::POST_ACTIVATION_IDLE_SEC;
             arenaWalls.clear();
             Rect w[4];
             boss.computeArenaWalls(w);
@@ -520,6 +577,7 @@ void Game::processPlayerMovement(float dt) {
             Vec2 bc(cx, cy);
             if (distanceSquared(player.position, bc) < bossActR2) {
                 boss.activated = true;
+                boss.postActivationIdleRemaining = BossEnemy::POST_ACTIVATION_IDLE_SEC;
                 arenaWalls.clear();
                 Rect w[4];
                 boss.computeArenaWalls(w);
@@ -573,6 +631,9 @@ void Game::processPlayerMovement(float dt) {
 }
 
 bool Game::resolveCollisions(float dt) {
+    // Calvin Young telegraph: cleared each frame; boss sets again during warning.
+    chargeWarningActive = false;
+
     // Update all projectiles
     int camX = camera.getOffsetX();
     int camY = camera.getOffsetY();
@@ -646,12 +707,22 @@ bool Game::resolveCollisions(float dt) {
         if (!bosses.isActive(i)) continue;
         BossEnemy& b = bosses[i];
         if (!b.active || !b.activated) continue;
+        if (b.postActivationIdleRemaining > 0.0f) {
+            b.postActivationIdleRemaining -= dt;
+            if (b.postActivationIdleRemaining < 0.0f) {
+                b.postActivationIdleRemaining = 0.0f;
+            }
+            continue;
+        }
         switch (b.type) {
             case BossType::SUMMONER:
                 updateSummonerBoss(b, dt);
                 break;
             case BossType::LASER:
                 updateLaserBoss(b, dt);
+                break;
+            case BossType::BULLET_HELL:
+                b.updateBulletHell(dt, level, player, *this);
                 break;
             default:
                 b.update(dt, level, player);
@@ -661,12 +732,22 @@ bool Game::resolveCollisions(float dt) {
 #else
     for (auto& boss : bosses) {
         if (!boss.active || !boss.activated) continue;
+        if (boss.postActivationIdleRemaining > 0.0f) {
+            boss.postActivationIdleRemaining -= dt;
+            if (boss.postActivationIdleRemaining < 0.0f) {
+                boss.postActivationIdleRemaining = 0.0f;
+            }
+            continue;
+        }
         switch (boss.type) {
             case BossType::SUMMONER:
                 updateSummonerBoss(boss, dt);
                 break;
             case BossType::LASER:
                 updateLaserBoss(boss, dt);
+                break;
+            case BossType::BULLET_HELL:
+                boss.updateBulletHell(dt, level, player, *this);
                 break;
             default:
                 boss.update(dt, level, player);
@@ -783,9 +864,20 @@ bool Game::resolveCollisions(float dt) {
         if (!enemyProjectiles.isActive(i)) continue;
         
         enemyProjectiles[i].update(dt);
-        
-        if (collision.checkEnemyProjectileTileCollision(enemyProjectiles[i], level)) {
-            enemyProjectiles[i].shouldDestroy = true;
+
+        const bool tileHit = collision.checkEnemyProjectileTileCollision(enemyProjectiles[i], level);
+        const bool arenaHit = enemyProjectileHitsArenaWall(enemyProjectiles[i]);
+        if (tileHit || arenaHit) {
+            EnemyProjectile& ep = enemyProjectiles[i];
+            if (ep.shrapnelCount > 0) {
+                const int n = BossEnemy::kBulletHellShrapnelCount;
+                for (int k = 0; k < n; ++k) {
+                    float ang = (6.28318530718f * static_cast<float>(k)) / static_cast<float>(n);
+                    Vec2 dir(floatToFixed(std::cos(ang)), floatToFixed(std::sin(ang)));
+                    spawnProjectile(ep.position, dir, 0);
+                }
+            }
+            ep.shouldDestroy = true;
         }
         
         fixed_t projX = enemyProjectiles[i].position.x;
@@ -800,8 +892,18 @@ bool Game::resolveCollisions(float dt) {
 #else
     for (auto& projectile : enemyProjectiles) {
         projectile.update(dt);
-        
-        if (collision.checkEnemyProjectileTileCollision(projectile, level)) {
+
+        const bool tileHit = collision.checkEnemyProjectileTileCollision(projectile, level);
+        const bool arenaHit = enemyProjectileHitsArenaWall(projectile);
+        if (tileHit || arenaHit) {
+            if (projectile.shrapnelCount > 0) {
+                const int n = BossEnemy::kBulletHellShrapnelCount;
+                for (int k = 0; k < n; ++k) {
+                    float ang = (6.28318530718f * static_cast<float>(k)) / static_cast<float>(n);
+                    Vec2 dir(static_cast<float>(std::cos(ang)), static_cast<float>(std::sin(ang)));
+                    spawnProjectile(projectile.position, dir, 0);
+                }
+            }
             projectile.shouldDestroy = true;
         }
         
@@ -844,7 +946,8 @@ bool Game::resolveCollisions(float dt) {
 
     if (levelHasBoss) {
         bool anyLaserBossVisible = false;
-        bool anyNonLaserBossVisible = false;
+        bool anySeanBossVisible = false;
+        bool anyCalvinBossVisible = false;
 #ifdef PLATFORM_PICO
         for (size_t i = 0; i < bosses.size(); i++) {
             if (!bosses.isActive(i)) {
@@ -855,8 +958,10 @@ bool Game::resolveCollisions(float dt) {
             }
             if (bosses[i].type == BossType::LASER) {
                 anyLaserBossVisible = true;
+            } else if (bosses[i].type == BossType::BULLET_HELL) {
+                anyCalvinBossVisible = true;
             } else {
-                anyNonLaserBossVisible = true;
+                anySeanBossVisible = true;
             }
         }
 #else
@@ -866,8 +971,10 @@ bool Game::resolveCollisions(float dt) {
             }
             if (b.type == BossType::LASER) {
                 anyLaserBossVisible = true;
+            } else if (b.type == BossType::BULLET_HELL) {
+                anyCalvinBossVisible = true;
             } else {
-                anyNonLaserBossVisible = true;
+                anySeanBossVisible = true;
             }
         }
 #endif
@@ -878,11 +985,18 @@ bool Game::resolveCollisions(float dt) {
                 bossLaserFrame = (bossLaserFrame + 1) % kRobertHunterFrameCount;
             }
         }
-        if (anyNonLaserBossVisible && bossSeanSpritesheet >= 0) {
+        if (anySeanBossVisible && bossSeanSpritesheet >= 0) {
             bossSeanAnimTimer += dt;
             if (bossSeanAnimTimer >= 0.1f) {
                 bossSeanAnimTimer -= 0.1f;
                 bossSeanFrame = (bossSeanFrame + 1) % 12;
+            }
+        }
+        if (anyCalvinBossVisible && bossCalvinSpritesheet >= 0) {
+            bossCalvinAnimTimer += dt;
+            if (bossCalvinAnimTimer >= kCalvinYoungAnimFrameSec) {
+                bossCalvinAnimTimer -= kCalvinYoungAnimFrameSec;
+                bossCalvinFrame = (bossCalvinFrame + 1) % 4;
             }
         }
     }
@@ -1432,6 +1546,60 @@ void Game::spawnLaser(BossEnemy& boss, const Vec2& origin, float dirX, float dir
 #endif
 }
 
+void Game::spawnProjectile(Vec2 pos, Vec2 dir, int shrapnelCount) {
+    const EnemyProjectileKind k =
+        shrapnelCount > 0 ? EnemyProjectileKind::BulletHellMain : EnemyProjectileKind::BulletHellShard;
+#ifdef PLATFORM_PICO
+    EnemyProjectile* slot = enemyProjectiles.allocate();
+    if (slot) {
+        *slot = EnemyProjectile(pos, dir, shrapnelCount, k);
+    }
+#else
+    enemyProjectiles.push_back(EnemyProjectile(pos, dir, shrapnelCount, k));
+#endif
+}
+
+bool Game::enemyProjectileHitsArenaWall(const EnemyProjectile& ep) const {
+    if (ep.kind == EnemyProjectileKind::Ranged) {
+        return false;
+    }
+    Rect c = ep.getCollider();
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < arenaWalls.size(); i++) {
+        if (!arenaWalls.isActive(i)) {
+            continue;
+        }
+        if (c.intersects(arenaWalls[i])) {
+            return true;
+        }
+    }
+#else
+    for (const auto& w : arenaWalls) {
+        if (c.intersects(w)) {
+            return true;
+        }
+    }
+#endif
+    return false;
+}
+
+void Game::showChargeWarning(Vec2 bossPos, Vec2 playerPos) {
+    chargeWarnFrom = bossPos;
+    chargeWarnTo = playerPos;
+    chargeWarningActive = true;
+}
+
+void Game::renderChargeWarningLine(int camX, int camY) {
+    if (!chargeWarningActive) {
+        return;
+    }
+    int x0 = static_cast<int>(fixedToFloat(chargeWarnFrom.x)) - camX;
+    int y0 = static_cast<int>(fixedToFloat(chargeWarnFrom.y)) - camY;
+    int x1 = static_cast<int>(fixedToFloat(chargeWarnTo.x)) - camX;
+    int y1 = static_cast<int>(fixedToFloat(chargeWarnTo.y)) - camY;
+    renderer->drawLine(x0, y0, x1, y1, Color(255, 0, 0));
+}
+
 bool Game::hasActiveLaser() const {
 #ifdef PLATFORM_PICO
     for (size_t i = 0; i < lasers.size(); i++) {
@@ -1576,6 +1744,27 @@ void Game::rebuildArenaWallsFromActivatedBosses() {
 #endif
 }
 
+void Game::resetBossArenaOnPlayerDeathOrRespawn() {
+    arenaWalls.clear();
+    lasers.clear();
+#ifdef PLATFORM_PICO
+    for (size_t i = 0; i < bosses.size(); i++) {
+        if (!bosses.isActive(i)) {
+            continue;
+        }
+        if (bosses[i].active) {
+            bosses[i].activated = false;
+        }
+    }
+#else
+    for (BossEnemy& b : bosses) {
+        if (b.active) {
+            b.activated = false;
+        }
+    }
+#endif
+}
+
 void Game::applyLaserArenaBottomTeleport() {
 #ifdef PLATFORM_PICO
     for (size_t i = 0; i < bosses.size(); i++) {
@@ -1591,7 +1780,7 @@ void Game::applyLaserArenaBottomTeleport() {
         }
         Rect w[4];
         b.computeArenaWalls(w);
-        if (player.getCollider().intersects(w[3])) {
+        if (playerFeetOverlapLaserArenaBottom(player.getCollider(), w[3])) {
             const float acx = fixedToFloat(b.laserArenaCenterX);
             const float acy = fixedToFloat(b.laserArenaCenterY);
             const float halfH = BossEnemy::LASER_ARENA_HALF_H_PX;
@@ -1661,8 +1850,12 @@ void Game::renderBossHealthBar() {
     const int barY = sh - marginBottom - barH;
     const int barX = (sw - barW) / 2;
 
-    const char* name =
-        (barBoss->type == BossType::LASER) ? "Robert Hunter" : "Sean Speziale";
+    const char* name = "Sean Speziale";
+    if (barBoss->type == BossType::LASER) {
+        name = "Robert Hunter";
+    } else if (barBoss->type == BossType::BULLET_HELL) {
+        name = "Calvin Young";
+    }
 #ifdef PLATFORM_PICO
     const int nameW = renderer->measureTextWidthScaled(name, kBossNameScale);
     renderer->drawTextScaled(name, (sw - nameW) / 2, barY - labelSpace, Color(255, 255, 255), kBossNameScale);
@@ -1815,6 +2008,14 @@ void Game::renderPlayingWorld() {
             } else {
                 renderer->drawRect(dstRect, Color(255, 0, 0), true);
             }
+        } else if (bosses[i].type == BossType::BULLET_HELL) {
+            if (bossCalvinSpritesheet >= 0) {
+                const int cf = calvinBossSpriteFrame(bosses[i], bossCalvinFrame);
+                renderer->drawSpriteFrame(bossCalvinSpritesheet, cf, kCalvinYoungFrameW, kCalvinYoungFrameH, dstRect,
+                                          false);
+            } else {
+                renderer->drawRect(dstRect, Color(255, 0, 255), true);
+            }
         } else if (bossSeanSpritesheet >= 0 && levelHasBoss) {
             renderer->drawSpriteFrame(bossSeanSpritesheet, bossSeanFrame, 32, 32, dstRect, false);
         } else {
@@ -1858,6 +2059,14 @@ void Game::renderPlayingWorld() {
             } else {
                 renderer->drawRect(dstRect, Color(255, 0, 0), true);
             }
+        } else if (boss.type == BossType::BULLET_HELL) {
+            if (bossCalvinSpritesheet >= 0) {
+                const int cf = calvinBossSpriteFrame(boss, bossCalvinFrame);
+                renderer->drawSpriteFrame(bossCalvinSpritesheet, cf, kCalvinYoungFrameW, kCalvinYoungFrameH, dstRect,
+                                          false);
+            } else {
+                renderer->drawRect(dstRect, Color(255, 0, 255), true);
+            }
         } else if (bossSeanSpritesheet >= 0 && levelHasBoss) {
             renderer->drawSpriteFrame(bossSeanSpritesheet, bossSeanFrame, 32, 32, dstRect, false);
         } else {
@@ -1867,6 +2076,7 @@ void Game::renderPlayingWorld() {
 #endif
 
     renderLasers();
+    renderChargeWarningLine(camX, camY);
     
     // Draw health packs
 #ifdef PLATFORM_PICO
@@ -1903,15 +2113,32 @@ void Game::renderPlayingWorld() {
 #ifdef PLATFORM_PICO
     for (size_t i = 0; i < enemyProjectiles.size(); i++) {
         if (!enemyProjectiles.isActive(i)) continue;
-        
-        Rect dstRect = enemyProjectilePicoDrawRect(enemyProjectiles[i]);
+
+        const EnemyProjectile& ep = enemyProjectiles[i];
+        if (ep.kind != EnemyProjectileKind::Ranged) {
+            Rect dstRect = ep.getCollider();
+            dstRect.x -= TO_FIXED(camX);
+            dstRect.y -= TO_FIXED(camY);
+            if (ep.kind == EnemyProjectileKind::BulletHellMain && rustballSpritesheet >= 0) {
+                renderer->drawSpriteFrame(rustballSpritesheet, 0, kRustballFrameW, kRustballFrameH, dstRect, false);
+            } else if (ep.kind == EnemyProjectileKind::BulletHellShard && rustShrapnelSpritesheet >= 0) {
+                renderer->drawSpriteFrame(rustShrapnelSpritesheet, 0, kRustShrapnelFrameW, kRustShrapnelFrameH, dstRect,
+                                          false);
+            } else {
+                renderer->drawRect(dstRect, Color(128, 128, 128), true);
+                renderer->drawRect(dstRect, Color(48, 48, 48), false);
+            }
+            continue;
+        }
+
+        Rect dstRect = enemyProjectilePicoDrawRect(ep);
         dstRect.x -= TO_FIXED(camX);
         dstRect.y -= TO_FIXED(camY);
-        
-        int spritesheet = enemyProjectiles[i].movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
-        
+
+        int spritesheet = ep.movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
+
         if (spritesheet >= 0) {
-            renderer->drawSpriteFrame(spritesheet, enemyProjectiles[i].currentFrame, 16, 16, dstRect, false);
+            renderer->drawSpriteFrame(spritesheet, ep.currentFrame, 16, 16, dstRect, false);
         } else {
             renderer->drawRect(dstRect, Color(128, 0, 255), true);
         }
@@ -1937,9 +2164,22 @@ void Game::renderPlayingWorld() {
         Rect dstRect = projectile.getCollider();
         dstRect.x -= camX;
         dstRect.y -= camY;
-        
+
+        if (projectile.kind != EnemyProjectileKind::Ranged) {
+            if (projectile.kind == EnemyProjectileKind::BulletHellMain && rustballSpritesheet >= 0) {
+                renderer->drawSpriteFrame(rustballSpritesheet, 0, kRustballFrameW, kRustballFrameH, dstRect, false);
+            } else if (projectile.kind == EnemyProjectileKind::BulletHellShard && rustShrapnelSpritesheet >= 0) {
+                renderer->drawSpriteFrame(rustShrapnelSpritesheet, 0, kRustShrapnelFrameW, kRustShrapnelFrameH, dstRect,
+                                          false);
+            } else {
+                renderer->drawRect(dstRect, Color(128, 128, 128), true);
+                renderer->drawRect(dstRect, Color(48, 48, 48), false);
+            }
+            continue;
+        }
+
         int spritesheet = projectile.movingRight ? enemyProjectileRightSpritesheet : enemyProjectileLeftSpritesheet;
-        
+
         if (spritesheet >= 0) {
             renderer->drawSpriteFrame(spritesheet, projectile.currentFrame, 16, 16, dstRect, false);
         } else {
@@ -2138,8 +2378,12 @@ void Game::renderYouPassed() {
     renderer->drawText(msg, (sw - msgW) / 2, msgY, Color(255, 255, 255));
 
     Rect iconRect(static_cast<float>(sw / 2 - 16), static_cast<float>(msgY + 28), 32.0f, 32.0f);
-    renderer->drawRect(iconRect, Color(200, 200, 200), true);
-    renderer->drawRect(iconRect, Color(0, 0, 0), false);
+    if (trophySpritesheet >= 0) {
+        renderer->drawSpriteFrame(trophySpritesheet, 0, kTrophyFrameW, kTrophyFrameH, iconRect, false);
+    } else {
+        renderer->drawRect(iconRect, Color(200, 200, 200), true);
+        renderer->drawRect(iconRect, Color(0, 0, 0), false);
+    }
 
     const Rect continueBtn = gameOverRetryButtonRect();
     renderer->drawRect(continueBtn, Color(64, 64, 64), true);

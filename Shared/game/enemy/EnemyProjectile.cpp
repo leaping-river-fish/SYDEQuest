@@ -22,12 +22,15 @@ inline fixed_t fixedSqrt(fixed_t x) {
 }
 #endif
 
-EnemyProjectile::EnemyProjectile(Vec2 startPos, Vec2 direction)
+EnemyProjectile::EnemyProjectile(Vec2 startPos, Vec2 direction, int shrapnelPieces,
+                                   EnemyProjectileKind projectileKind)
     : position(startPos),
       lifetime(0.0f),
       shouldDestroy(false),
       currentFrame(0),
-      animationTimer(0.0f)
+      animationTimer(0.0f),
+      shrapnelCount(shrapnelPieces),
+      kind(projectileKind)
 {
 #ifdef PLATFORM_PICO
     fixed_t lengthSquared = FIXED_MUL(direction.x, direction.x) + FIXED_MUL(direction.y, direction.y);
@@ -70,14 +73,30 @@ void EnemyProjectile::update(float deltaTime) {
         shouldDestroy = true;
     }
     
-    // Update animation
-    animationTimer += deltaTime;
-    if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
-        animationTimer -= ANIM_FRAME_DURATION_SEC;
-        currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
+    if (kind == EnemyProjectileKind::Ranged) {
+        animationTimer += deltaTime;
+        if (animationTimer >= ANIM_FRAME_DURATION_SEC) {
+            animationTimer -= ANIM_FRAME_DURATION_SEC;
+            currentFrame = (currentFrame + 1) % TOTAL_FRAMES;
+        }
     }
 }
 
 Rect EnemyProjectile::getCollider() const {
+#ifdef PLATFORM_PICO
+    if (kind == EnemyProjectileKind::BulletHellMain) {
+        return Rect(position.x, position.y, TO_FIXED(16.0f), TO_FIXED(16.0f));
+    }
+    if (kind == EnemyProjectileKind::BulletHellShard) {
+        return Rect(position.x, position.y, TO_FIXED(8.0f), TO_FIXED(8.0f));
+    }
+#else
+    if (kind == EnemyProjectileKind::BulletHellMain) {
+        return Rect(position.x, position.y, 16.0f, 16.0f);
+    }
+    if (kind == EnemyProjectileKind::BulletHellShard) {
+        return Rect(position.x, position.y, 8.0f, 8.0f);
+    }
+#endif
     return Rect(position.x, position.y, WIDTH, HEIGHT);
 }

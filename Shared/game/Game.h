@@ -170,7 +170,17 @@ private:
     int titleSpritesheet;
     int bossSeanSpritesheet;
     int bossLaserSpritesheet;
+    int bossCalvinSpritesheet;
     int gameOverSpritesheet;
+    int rustballSpritesheet;
+    int rustShrapnelSpritesheet;
+    /** YOU PASSED screen icon; must match assets/Trophy.png and Pico/assets/trophy_sprite.h. */
+    int trophySpritesheet;
+
+    /** Calvin Young charge telegraph (world space). */
+    bool chargeWarningActive;
+    Vec2 chargeWarnFrom;
+    Vec2 chargeWarnTo;
 
     // HP UI animation state
     int hpUIFrame;
@@ -185,6 +195,9 @@ private:
 
     int bossLaserFrame;
     float bossLaserAnimTimer;
+
+    int bossCalvinFrame;
+    float bossCalvinAnimTimer;
 
     int gameOverFrame;
     float gameOverAnimTimer;
@@ -245,7 +258,14 @@ private:
     void resolveArenaWallsForPlayer();
     /** Laser arena: if player touches the bottom wall strip, snap to a safe spot (avoids fall-through / jitter). */
     void applyLaserArenaBottomTeleport();
+    /** Clear arena walls / lasers and boss activation so the fight can re-trigger after respawn or game over. */
+    void resetBossArenaOnPlayerDeathOrRespawn();
     void renderBossHealthBar();
+    void renderChargeWarningLine(int camX, int camY);
+
+    void spawnProjectile(Vec2 pos, Vec2 dir, int shrapnelCount);
+    bool enemyProjectileHitsArenaWall(const EnemyProjectile& ep) const;
+    void showChargeWarning(Vec2 bossPos, Vec2 playerPos);
 
     /** Pit / out-of-bounds: teleport to `level.getSpawnPoint()` (no second loadLevel — avoids fragile desktop reload). */
     void respawnPlayerAtCurrentLevelStart();
