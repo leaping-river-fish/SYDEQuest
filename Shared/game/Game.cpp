@@ -10,28 +10,6 @@
 #include <cctype>
 #include <cmath>
 
-#ifndef PLATFORM_PICO
-#include <chrono>
-#include <fstream>
-namespace {
-// #region agent log
-void agentDebugNdjsonPortal(const char* location, const char* message, const char* hypothesisId,
-    uint32_t frameId, bool portalTransition, int stateInt) {
-    using namespace std::chrono;
-    const auto ms = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-    std::ofstream f("debug-b1e685.log", std::ios::app);
-    if (!f) {
-        return;
-    }
-    f << "{\"sessionId\":\"b1e685\",\"location\":\"" << location << "\",\"message\":\"" << message
-      << "\",\"hypothesisId\":\"" << hypothesisId << "\",\"data\":{\"frame\":" << frameId
-      << ",\"portalTransition\":" << (portalTransition ? "true" : "false")
-      << ",\"state\":" << stateInt << "},\"timestamp\":" << ms << "}\n";
-}
-// #endregion
-}  // namespace
-#endif
-
 // Pico: add -DGAME_TRACE to compile definitions (or CMake target_compile_definitions) to log UART markers
 // during freezes; requires stdio_init_all() in main.
 #if defined(PLATFORM_PICO) && defined(GAME_TRACE)
@@ -50,6 +28,8 @@ void agentDebugNdjsonPortal(const char* location, const char* message, const cha
 #include "../../Pico/assets/level3_data.h"
 #include "../../Pico/assets/level4_data.h"
 #include "../../Pico/assets/level5_data.h"
+#include "../../Pico/assets/level6_data.h"
+#include "../../Pico/assets/level7_data.h"
 #endif
 
 namespace {
@@ -105,17 +85,15 @@ constexpr float kSummonerSummonSeconds = 3.0f;
 constexpr float kSummonerEnemySpawnAfterSeconds = 1.0f;
 
 const Vec2 kLaserWaypoints[5] = {
-    Vec2(96.0f, 384.0f),
-    Vec2(400.0f, 384.0f),
-    Vec2(96.0f, 592.0f),
-    Vec2(400.0f, 592.0f),
-    Vec2(240.0f, 464.0f),
+    Vec2(64.0f, 624.0f),
+    Vec2(432.0f, 624.0f),
+    Vec2(64.0f, 416.0f),
+    Vec2(432.0f, 416.0f),
+    Vec2(240.0f, 480.0f),
 };
 constexpr float kLaserBossMoveSpeed = 90.0f;
 constexpr float kLaserBossWaypointArrivePx = 10.0f;
-/** Safe respawn inside the laser arena when the bottom wall is touched (world pixels). */
-constexpr float kLaserArenaBottomRecoverX = 240.0f;
-constexpr float kLaserArenaBottomRecoverY = 480.0f;
+constexpr float kLaserBossWaypointPauseSec = 1.0f;
 
 #ifdef PLATFORM_PICO
 /** World rect for drawing 16×16 integral art centered on the 8×8 collider (avoids Pico downscale artifacts). */
@@ -335,7 +313,11 @@ bool Game::loadLevel(const char* levelName) {
 #ifdef PLATFORM_PICO
     // Embedded build: CSV paths from portals are not on a filesystem; use baked level data.
     bool ok = false;
-    if (pathContainsInsensitive(levelName, "level5")) {
+    if (pathContainsInsensitive(levelName, "level7")) {
+        ok = level.loadFromBinaryData(level7_tiles, level7_width, level7_height, &level7_metadata);
+    } else if (pathContainsInsensitive(levelName, "level6")) {
+        ok = level.loadFromBinaryData(level6_tiles, level6_width, level6_height, &level6_metadata);
+    } else if (pathContainsInsensitive(levelName, "level5")) {
         ok = level.loadFromBinaryData(level5_tiles, level5_width, level5_height, &level5_metadata);
     } else if (pathContainsInsensitive(levelName, "level4")) {
         ok = level.loadFromBinaryData(level4_tiles, level4_width, level4_height, &level4_metadata);
@@ -458,6 +440,10 @@ void Game::beginGameOver() {
     state = GameState::GameOver;
     gameOverFrame = 0;
     gameOverAnimTimer = 0.0f;
+}
+
+void Game::beginYouPassed() {
+    state = GameState::YouPassed;
 }
 
 void Game::respawnPlayerAtCurrentLevelStart() {
@@ -1136,6 +1122,19 @@ void Game::update() {
         }
         return;
     }
+    if (state == GameState::YouPassed) {
+        const Rect continueBtn = gameOverRetryButtonRect();
+        int mx = 0;
+        int my = 0;
+        input->getMouseLogicalPosition(mx, my);
+        if (input->wasJustPressed(Button::MenuConfirm) ||
+            (input->wasMousePrimaryJustPressed() && pointInRect(mx, my, continueBtn))) {
+            state = GameState::MainMenu;
+            strncpy(currentLevelName, "../levels/Level1.csv", sizeof(currentLevelName) - 1);
+            currentLevelName[sizeof(currentLevelName) - 1] = '\0';
+        }
+        return;
+    }
     if (state == GameState::GameOver) {
         if (gameOverSpritesheet >= 0) {
             gameOverAnimTimer += dt;
@@ -1242,6 +1241,10 @@ void Game::checkPortalCollisions() {
                 return;
             }
             portalTransitionArmed = false;
+            if (portals[i].leadsToPassScreen) {
+                beginYouPassed();
+                break;
+            }
             if (!loadLevel(portals[i].targetLevel)) {
                 portalTransitionArmed = true;
             }
@@ -1260,6 +1263,10 @@ void Game::checkPortalCollisions() {
                     return;
                 }
                 portalTransitionArmed = false;
+                if (portal.leadsToPassScreen) {
+                    beginYouPassed();
+                    break;
+                }
                 if (!loadLevel(portal.targetLevel)) {
                     portalTransitionArmed = true;
                 }
@@ -1351,6 +1358,23 @@ void Game::updateLaserBoss(BossEnemy& boss, float dt) {
         boss.laserOrderInitialized = true;
     }
 
+    if (boss.laserWaypointPauseRemaining > 0.0f) {
+        boss.laserWaypointPauseRemaining -= dt;
+        if (boss.laserWaypointPauseRemaining <= 0.0f) {
+            boss.laserWaypointPauseRemaining = 0.0f;
+            boss.laserWaypointIndex++;
+            if (boss.laserWaypointIndex >= 5) {
+                for (int i = 0; i < 5; ++i) {
+                    boss.laserWaypointOrder[i] = static_cast<uint8_t>(i);
+                }
+                shuffleLaserWaypointOrder(boss);
+                boss.laserWaypointIndex = 0;
+            }
+        }
+        boss.updateLaser(dt, level, player, *this);
+        return;
+    }
+
     const Vec2& target = kLaserWaypoints[boss.laserWaypointOrder[boss.laserWaypointIndex % 5]];
     float px = fixedToFloat(boss.position.x);
     float py = fixedToFloat(boss.position.y);
@@ -1361,20 +1385,15 @@ void Game::updateLaserBoss(BossEnemy& boss, float dt) {
     float distSq = dx * dx + dy * dy;
     const float thresh = kLaserBossWaypointArrivePx;
     if (distSq <= thresh * thresh) {
-        boss.laserWaypointIndex++;
-        if (boss.laserWaypointIndex >= 5) {
-            for (int i = 0; i < 5; ++i) {
-                boss.laserWaypointOrder[i] = static_cast<uint8_t>(i);
-            }
-            shuffleLaserWaypointOrder(boss);
-            boss.laserWaypointIndex = 0;
-        }
+        boss.position = target;
+        boss.laserWaypointPauseRemaining = kLaserBossWaypointPauseSec;
     } else {
         float len = std::sqrt(distSq);
         if (len >= 1e-4f) {
             float step = kLaserBossMoveSpeed * dt;
             if (step >= len) {
                 boss.position = target;
+                boss.laserWaypointPauseRemaining = kLaserBossWaypointPauseSec;
             } else {
                 px += (dx / len) * step;
                 py += (dy / len) * step;
@@ -1387,8 +1406,8 @@ void Game::updateLaserBoss(BossEnemy& boss, float dt) {
 }
 
 void Game::spawnLaser(BossEnemy& boss, const Vec2& origin, float dirX, float dirY) {
-    float cx = fixedToFloat(boss.position.x + FIXED_DIV(BossEnemy::WIDTH, TO_FIXED(2.0f)));
-    float cy = fixedToFloat(boss.position.y + FIXED_DIV(BossEnemy::HEIGHT, TO_FIXED(2.0f)));
+    float cx = fixedToFloat(boss.laserArenaCenterX);
+    float cy = fixedToFloat(boss.laserArenaCenterY);
     const float hw = BossEnemy::LASER_ARENA_HALF_W_PX;
     const float hh = BossEnemy::LASER_ARENA_HALF_H_PX;
 
@@ -1573,7 +1592,12 @@ void Game::applyLaserArenaBottomTeleport() {
         Rect w[4];
         b.computeArenaWalls(w);
         if (player.getCollider().intersects(w[3])) {
-            player.position = Vec2(kLaserArenaBottomRecoverX, kLaserArenaBottomRecoverY);
+            const float acx = fixedToFloat(b.laserArenaCenterX);
+            const float acy = fixedToFloat(b.laserArenaCenterY);
+            const float halfH = BossEnemy::LASER_ARENA_HALF_H_PX;
+            const float pw = fixedToFloat(Player::WIDTH);
+            const float ph = fixedToFloat(Player::HEIGHT);
+            player.position = Vec2(acx - pw * 0.5f, acy + halfH - ph);
             player.velocity = Vec2(0.0f, 0.0f);
             player.setGrounded(true);
 #ifdef PLATFORM_PICO
@@ -2103,6 +2127,36 @@ void Game::renderGameOver() {
     renderer->drawText(retryLabel, (sw - w1) / 2, txtY, Color(255, 255, 255));
 }
 
+void Game::renderYouPassed() {
+    renderer->clear(Color(0, 0, 0));
+
+    const int sw = renderer->getScreenWidth();
+
+    const char* msg = "YOU PASSED";
+    const int msgW = renderer->measureTextWidth(msg);
+    const int msgY = 40;
+    renderer->drawText(msg, (sw - msgW) / 2, msgY, Color(255, 255, 255));
+
+    Rect iconRect(static_cast<float>(sw / 2 - 16), static_cast<float>(msgY + 28), 32.0f, 32.0f);
+    renderer->drawRect(iconRect, Color(200, 200, 200), true);
+    renderer->drawRect(iconRect, Color(0, 0, 0), false);
+
+    const Rect continueBtn = gameOverRetryButtonRect();
+    renderer->drawRect(continueBtn, Color(64, 64, 64), true);
+    renderer->drawRect(continueBtn, Color(0, 0, 0), false);
+
+    const char* continueLabel = "CONTINUE";
+    const int w1 = renderer->measureTextWidth(continueLabel);
+#ifdef PLATFORM_PICO
+    const int continueTop = static_cast<int>(FROM_FIXED(continueBtn.y));
+    const int continueH = static_cast<int>(FROM_FIXED(continueBtn.height));
+    const int txtY = continueTop + (continueH - 16) / 2;
+#else
+    const int txtY = static_cast<int>(continueBtn.y) + (static_cast<int>(continueBtn.height) - 12) / 2;
+#endif
+    renderer->drawText(continueLabel, (sw - w1) / 2, txtY, Color(255, 255, 255));
+}
+
 Rect Game::menuTitlePlaceholderRect() const {
     const int sw = renderer->getScreenWidth();
     constexpr int titleW = 128;
@@ -2143,6 +2197,9 @@ void Game::render() {
         break;
     case GameState::GameOver:
         renderGameOver();
+        break;
+    case GameState::YouPassed:
+        renderYouPassed();
         break;
     case GameState::Playing:
         renderPlayingWorld();

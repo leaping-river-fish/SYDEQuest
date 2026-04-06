@@ -29,7 +29,8 @@ class ITimer;
 enum class GameState {
     MainMenu,
     Playing,
-    GameOver
+    GameOver,
+    YouPassed
 };
 
 #ifdef PLATFORM_PICO
@@ -210,6 +211,7 @@ private:
 
     void renderMainMenu();
     void renderGameOver();
+    void renderYouPassed();
     void renderPlayingWorld();
     Rect menuTitlePlaceholderRect() const;
     Rect menuStartButtonRect() const;
@@ -254,5 +256,6 @@ private:
     /** Game Over retry: respawn at spawn with full HP without reloading the level. */
     void retryAfterGameOver();
     void beginGameOver();
+    void beginYouPassed();
 };
 

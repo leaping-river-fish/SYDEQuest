@@ -37,6 +37,7 @@ struct PortalData {
     float y;
     float w;
     float h;
+    /** 0..6 = Level 1..7; 7 = PASS_SCREEN (You Passed, no level file). */
     uint8_t targetLevelId;
     float targetX;
     float targetY;

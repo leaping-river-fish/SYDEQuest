@@ -71,10 +71,6 @@ def main() -> int:
         return;
     }
     if (playerDiedThisFrame) {
-#ifndef PLATFORM_PICO
-        agentDebugNdjsonPortal("Game.cpp:update", "portal_skip_death_frame", "H_death_portal_order",
-            debugUpdateFrameIndex, true, false, static_cast<int>(state));
-#endif
         return;
     }
     checkPortalCollisions();
@@ -98,10 +94,6 @@ def main() -> int:
         "void Game::checkDeath() {\n"
         "    if (state == GameState::GameOver) {\n"
         "        playerDiedThisFrame = true;\n"
-        "#ifndef PLATFORM_PICO\n"
-        "        agentDebugNdjsonPortal(\"Game.cpp:checkDeath\", \"death_frame\", \"H_death_portal_order\",\n"
-        "            debugUpdateFrameIndex, true, false, static_cast<int>(state));\n"
-        "#endif\n"
         "    }\n"
         "}\n\n"
         "void Game::updateLevelState() {\n"
@@ -115,10 +107,6 @@ def main() -> int:
     portal_sig = "void Game::checkPortalCollisions() {\n    if (player.health <= 0) {"
     portal_repl = """void Game::checkPortalCollisions() {
     if (playerDiedThisFrame) {
-#ifndef PLATFORM_PICO
-        agentDebugNdjsonPortal("Game.cpp:checkPortalCollisions", "portal_blocked_death_frame", "H_death_portal_order",
-            debugUpdateFrameIndex, true, false, static_cast<int>(state));
-#endif
         return;
     }
     if (state != GameState::Playing) {

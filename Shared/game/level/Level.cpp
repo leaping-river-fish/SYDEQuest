@@ -18,6 +18,23 @@ void trimTrailingWhitespace(char* s) {
     }
 }
 
+bool passScreenPortalTokenEqualsCi(const char* s) {
+    if (!s) {
+        return false;
+    }
+    static const char kPass[] = "PASS_SCREEN";
+    for (size_t i = 0;; ++i) {
+        const unsigned char c1 = static_cast<unsigned char>(s[i]);
+        const unsigned char c2 = static_cast<unsigned char>(kPass[i]);
+        if (std::tolower(c1) != std::tolower(c2)) {
+            return false;
+        }
+        if (c1 == '\0') {
+            return true;
+        }
+    }
+}
+
 bool parseBossTypeFromString(const char* typeStr, BossType& out) {
     char buf[64];
     strncpy(buf, typeStr, sizeof(buf) - 1);
@@ -246,8 +263,13 @@ bool Level::loadFromFile(const char* filename) {
             if (sscanf(line + 7, "%f %f %f %f %s %f %f", 
                       &px, &py, &pw, &ph, targetFile, &tsx, &tsy) == 7) {
                 portal.bounds = Rect(px, py, pw, ph);
-                strncpy(portal.targetLevel, targetFile, sizeof(portal.targetLevel) - 1);
-                portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
+                portal.leadsToPassScreen = passScreenPortalTokenEqualsCi(targetFile);
+                if (portal.leadsToPassScreen) {
+                    portal.targetLevel[0] = '\0';
+                } else {
+                    strncpy(portal.targetLevel, targetFile, sizeof(portal.targetLevel) - 1);
+                    portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
+                }
                 portal.targetSpawn = Vec2(tsx, tsy);
 #ifdef PLATFORM_PICO
                 if (portalCount < MAX_PORTALS) {
@@ -451,8 +473,13 @@ bool Level::loadFromData(const char* csvData) {
                 if (sscanf(line + 7, "%f %f %f %f %s %f %f", 
                           &px, &py, &pw, &ph, targetFile, &tsx, &tsy) == 7) {
                     portal.bounds = Rect(px, py, pw, ph);
-                    strncpy(portal.targetLevel, targetFile, sizeof(portal.targetLevel) - 1);
-                    portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
+                    portal.leadsToPassScreen = passScreenPortalTokenEqualsCi(targetFile);
+                    if (portal.leadsToPassScreen) {
+                        portal.targetLevel[0] = '\0';
+                    } else {
+                        strncpy(portal.targetLevel, targetFile, sizeof(portal.targetLevel) - 1);
+                        portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
+                    }
                     portal.targetSpawn = Vec2(tsx, tsy);
                     if (portalCount < MAX_PORTALS) {
                         portals[portalCount++] = portal;
@@ -585,8 +612,12 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
         const PortalData& pd = metadata->portals[i];
         Portal portal;
         portal.bounds = Rect(pd.x, pd.y, pd.w, pd.h);
-        
-        if (pd.targetLevelId == 0) {
+        portal.leadsToPassScreen = false;
+
+        if (pd.targetLevelId == 7) {
+            portal.leadsToPassScreen = true;
+            portal.targetLevel[0] = '\0';
+        } else if (pd.targetLevelId == 0) {
             strncpy(portal.targetLevel, "../levels/Level1.csv", sizeof(portal.targetLevel) - 1);
         } else if (pd.targetLevelId == 1) {
             strncpy(portal.targetLevel, "../levels/Level2.csv", sizeof(portal.targetLevel) - 1);
@@ -596,6 +627,10 @@ bool Level::loadFromBinaryData(const int8_t* tiles, int widthIn, int heightIn,
             strncpy(portal.targetLevel, "../levels/Level4.csv", sizeof(portal.targetLevel) - 1);
         } else if (pd.targetLevelId == 4) {
             strncpy(portal.targetLevel, "../levels/Level5.csv", sizeof(portal.targetLevel) - 1);
+        } else if (pd.targetLevelId == 5) {
+            strncpy(portal.targetLevel, "../levels/Level6.csv", sizeof(portal.targetLevel) - 1);
+        } else if (pd.targetLevelId == 6) {
+            strncpy(portal.targetLevel, "../levels/Level7.csv", sizeof(portal.targetLevel) - 1);
         }
         portal.targetLevel[sizeof(portal.targetLevel) - 1] = '\0';
         

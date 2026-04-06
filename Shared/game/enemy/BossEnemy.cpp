@@ -47,7 +47,10 @@ BossEnemy::BossEnemy()
     , laserWaypointIndex(0)
     , laserOrderInitialized(false)
     , laserRngState(0xC0FFEEu)
-    , laserFireTimer(0.0f) {}
+    , laserFireTimer(0.0f)
+    , laserWaypointPauseRemaining(0.0f)
+    , laserArenaCenterX(0)
+    , laserArenaCenterY(0) {}
 
 BossEnemy::BossEnemy(Vec2 spawn, BossType bossType)
     : position(spawn)
@@ -64,9 +67,14 @@ BossEnemy::BossEnemy(Vec2 spawn, BossType bossType)
     , laserWaypointIndex(0)
     , laserOrderInitialized(false)
     , laserRngState(0xC0FFEEu)
-    , laserFireTimer(0.0f) {
+    , laserFireTimer(0.0f)
+    , laserWaypointPauseRemaining(0.0f)
+    , laserArenaCenterX(0)
+    , laserArenaCenterY(0) {
     if (bossType == BossType::LASER) {
         laserFireTimer = BossEnemy::LASER_FIRE_INTERVAL_SEC;
+        laserArenaCenterX = spawn.x + FIXED_DIV(WIDTH, TO_FIXED(2.0f));
+        laserArenaCenterY = spawn.y + FIXED_DIV(HEIGHT, TO_FIXED(2.0f));
     }
 }
 
@@ -129,8 +137,15 @@ Rect BossEnemy::getCollider() const {
 
 void BossEnemy::computeArenaWalls(Rect out[4]) const {
 #ifdef PLATFORM_PICO
-    fixed_t cx = position.x + FIXED_DIV(WIDTH, TO_FIXED(2.0f));
-    fixed_t cy = position.y + FIXED_DIV(HEIGHT, TO_FIXED(2.0f));
+    fixed_t cx;
+    fixed_t cy;
+    if (type == BossType::LASER) {
+        cx = laserArenaCenterX;
+        cy = laserArenaCenterY;
+    } else {
+        cx = position.x + FIXED_DIV(WIDTH, TO_FIXED(2.0f));
+        cy = position.y + FIXED_DIV(HEIGHT, TO_FIXED(2.0f));
+    }
     fixed_t t = ARENA_WALL_THICKNESS;
     fixed_t halfW = ARENA_HALF_W;
     fixed_t halfH = ARENA_HALF_H;
@@ -146,8 +161,15 @@ void BossEnemy::computeArenaWalls(Rect out[4]) const {
     out[2] = Rect(cx - halfW, cy - halfH - t, w2, t);
     out[3] = Rect(cx - halfW, cy + halfH, w2, t);
 #else
-    float cx = position.x + WIDTH * 0.5f;
-    float cy = position.y + HEIGHT * 0.5f;
+    float cx;
+    float cy;
+    if (type == BossType::LASER) {
+        cx = laserArenaCenterX;
+        cy = laserArenaCenterY;
+    } else {
+        cx = position.x + WIDTH * 0.5f;
+        cy = position.y + HEIGHT * 0.5f;
+    }
     float t = ARENA_WALL_THICKNESS;
     float halfW = ARENA_HALF_W;
     float halfH = ARENA_HALF_H;

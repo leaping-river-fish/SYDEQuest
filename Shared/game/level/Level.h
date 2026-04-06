@@ -25,8 +25,10 @@ struct Portal {
     Rect bounds;
     char targetLevel[64];
     Vec2 targetSpawn;
-    
-    Portal() : bounds(), targetSpawn() {
+    /** Set from CSV token PASS_SCREEN / embedded targetLevelId 7 — triggers You Passed instead of loadLevel. */
+    bool leadsToPassScreen;
+
+    Portal() : bounds(), targetSpawn(), leadsToPassScreen(false) {
         targetLevel[0] = '\0';
     }
 };

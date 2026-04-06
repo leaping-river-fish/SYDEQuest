@@ -71,6 +71,12 @@ public:
     bool laserOrderInitialized;
     uint32_t laserRngState;
     float laserFireTimer;
+    /** Seconds left standing still after reaching a waypoint (>0 = paused). */
+    float laserWaypointPauseRemaining;
+
+    /** LASER boss: arena center at spawn (collider center); walls and laser bounds use this, not current position. */
+    fixed_t laserArenaCenterX;
+    fixed_t laserArenaCenterY;
 
     BossEnemy();
     BossEnemy(Vec2 spawn, BossType bossType);
