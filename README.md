@@ -1,6 +1,6 @@
-# SYDEQuest
+# SYDEQUEST
 
-**SYDEQuest** is a **2D platformer** written in **C++17** with one shared game core and two targets: a **desktop** build (SDL2) for development and play-testing, and a **Raspberry Pi Pico 2** build with an **ST7789** display, analog joystick, buttons, and optional **DRV2605** haptics. The game is themed around SYDE coursework motifs: **boss fights** include laser-style patterns, summoner-style encounters, and projectile-heavy arenas.
+**SYDEQUEST** is a **2D platformer** written in **C++17** with one shared game core and two targets: a **desktop** build (SDL2) for development and play-testing, and a **Raspberry Pi Pico 2** build with an **ST7789** display, analog joystick, buttons, and optional **DRV2605** haptics. The game is themed around SYDE coursework motifs: **boss fights** include laser-style patterns, summoner-style encounters, and projectile-heavy arenas.
 
 ## Features
 

@@ -6,54 +6,54 @@
 
 
 
-This project is the capstone work for SYDE 263, combining **digital fabrication**, **embedded systems**, and **original game software** into one integrated system: a custom handheld console that runs an original platformer, **SYDEQuest**. The physical side of the project follows a full design cycle—from early cardboard fit checks and layout planning through laser-cut acrylic, 3D-printed enclosure parts, wiring, and a finished assembly that houses a Raspberry Pi Pico 2, display, joystick and buttons, charging and battery hardware, and haptic feedback. The goal is not only a playable device but a demonstration of how CAD, sensors, actuators, and firmware come together in a single product.
+This project is the capstone work for SYDE 263, combining **digital fabrication**, **embedded systems**, and **original game software** into one integrated system: a custom handheld console that runs an original platformer, **SYDEQUEST**. The physical side of the project follows a full design cycle—from early cardboard fit checks and layout planning through laser-cut acrylic, 3D-printed enclosure parts, wiring, and a finished assembly that houses a Raspberry Pi Pico 2, display, joystick and buttons, charging and battery hardware, and haptic feedback. The goal is not only a playable device but a demonstration of how CAD, sensors, actuators, and firmware come together in a single product.
 
 
 
-![Early prototype enclosure planning](Prototype.jpeg)
+![Early prototype enclosure planning](assets/Prototype.jpeg)
 
 [Early prototype enclosure planning]
 
 
-**SYDEQuest** is a 2D platformer written in **C++** with a **desktop-first** architecture (SDL2) so gameplay, physics, and content can be developed and debugged on PC before the same core game logic is targeted at the Pico 2. The game loads **tile-based levels** from CSV files, uses a scrolling camera, and includes platformer physics, collision, projectiles, melee and ranged enemies, health pickups, and animated portals. Collectible **objectives** in the world are themed to the course build: items such as the charger, enclosure, haptic module, parts, screen, and Pico—linking the virtual quest to the real hardware stack.
+**SYDEQUEST** is a 2D platformer written in **C++** with a **desktop-first** architecture (SDL2) so gameplay, physics, and content can be developed and debugged on PC before the same core game logic is targeted at the Pico 2. The game loads **tile-based levels** from CSV files, uses a scrolling camera, and includes platformer physics, collision, projectiles, melee and ranged enemies, health pickups, and animated portals. Collectible **objectives** in the world are themed to the course build: items such as the charger, enclosure, haptic module, parts, screen, and Pico—linking the virtual quest to the real hardware stack.
 
 
 
-![Level 1 layout (tile map)](Level1.png)
+![Level 1 layout (tile map)](assets/Level1.png)
 
 [Level 1 layout (tile map)]
 
 
-![In-game SYDEQuest screenshot](sydequest7.png)
+![In-game SYDEQUEST screenshot](assets/SYDEQUEST7.png)
 
-[In-game SYDEQuest screenshot]
+[In-game SYDEQUEST screenshot]
 
 
 On the hardware side, input comes from an **analog joystick** and **buttons**; output includes a small **SPI display** for the game view and a **vibration motor** for haptics on events such as damage or collisions. An enclosure designed for hardware visibility, access to ports, and secure mounting of the Pico, screen, and controls. The photos below show the assembled console from the front and back, including the user-facing controls and display and the rear with enclosure details.
 
 
 
-![Finished handheld console (front)](FinalF.jpeg)
+![Finished handheld console (front)](assets/FinalF.jpeg)
 
 [Finished handheld console (front)]
 
 
-![Finished handheld console (back)](FinalB.jpeg)
+![Finished handheld console (back)](assets/FinalB.jpeg)
 
 [Finished handheld console (back)]
 
 
-Taken together, SYDEQuest and the handheld console satisfy the course emphasis on **parametric CAD**, **sensor and actuator integration**, **intermediate fabrication** (print, laser cut, assembly), and **embedded programming**—delivering both a playable game and a tangible device that runs that game on real hardware.
+Taken together, SYDEQUEST and the handheld console satisfy the course emphasis on **parametric CAD**, **sensor and actuator integration**, **intermediate fabrication** (print, laser cut, assembly), and **embedded programming**—delivering both a playable game and a tangible device that runs that game on real hardware.
 
 ## Gameplay
 
-![Level1](Level1.gif)
+![Level1](assets/Level1.gif)
 
-![Level2](Level2.gif)
+![Level2](assets/Level2.gif)
 
-![Boss](Boss.gif)
+![Boss](assets/Boss.gif)
 
-![Level3](Level3.gif)
+![Level3](assets/Level3.gif)
 
 
 ## Bill of Materials
@@ -82,7 +82,7 @@ Taken together, SYDEQuest and the handheld console satisfy the course emphasis o
 ## Reflection
 
 ### What
-I built a handheld game console consisting of a the typical screen, joystick, four buttons (only 3 now). I also designed and programmed the game that the handheld console will run, SYDEQuest. A few things that went well: the process of programming the game was not too bad, of course debugging was tedious but I enjoyed play testing the game. Designing the sprites for the game was also pretty fun, it was my first time actually trying pixel art. Planning and assembling the actual enclosure of the handheld was very satisfying as I could see everything come together. The hardware and embedded systems were at first fun to put together and solder, but then it got frustrating. 
+I built a handheld game console consisting of a the typical screen, joystick, four buttons (only 3 now). I also designed and programmed the game that the handheld console will run, SYDEQUEST. A few things that went well: the process of programming the game was not too bad, of course debugging was tedious but I enjoyed play testing the game. Designing the sprites for the game was also pretty fun, it was my first time actually trying pixel art. Planning and assembling the actual enclosure of the handheld was very satisfying as I could see everything come together. The hardware and embedded systems were at first fun to put together and solder, but then it got frustrating. 
 
 Moving on the bad experiences: I didn't realize that the Pico did not have enough RAM to be able to run a game with a framebuffer, which caused me to purchase the Pico 2. This lead to my second issue with soldering since I soldered the Pico 2 at home with my own solder which differed from the one in lab, it definitely caused the solder to lose some of its properties when I mixed my solder with the one in the lab. As a result, wires just kept falling out or not sticking enough. Another thing was that I definitely developed my game too far at first before trying to test it on the hardware, this was due to me placing the orders on my parts really late. Consequently, when I tried debugging it was a nightmare figuring out what was actually going wrong since there were so many variables.  
 
@@ -102,43 +102,43 @@ Moving forward, I want to add a charging system so that the game console can act
 
 | Photo | Preview |
 |-------|---------|
-| Debugging1 | ![Debugging1](Debugging1.jpeg) |
-| Debugging2 | ![Debugging2](Debugging2.jpeg) |
-| Debugging3 | ![Debugging3](Debugging3.jpeg) |
-| Debugging4 | ![Debugging4](Debugging4.jpeg) |
-| Debugging5 | ![Debugging5](Debugging5.jpeg) |
-| Debugging6 | ![Debugging6](Debugging6.jpeg) |
+| Debugging1 | ![Debugging1](assets/Debugging1.jpeg) |
+| Debugging2 | ![Debugging2](assets/Debugging2.jpeg) |
+| Debugging3 | ![Debugging3](assets/Debugging3.jpeg) |
+| Debugging4 | ![Debugging4](assets/Debugging4.jpeg) |
+| Debugging5 | ![Debugging5](assets/Debugging5.jpeg) |
+| Debugging6 | ![Debugging6](assets/Debugging6.jpeg) |
 
 ## Sprites
 
-**Table 3: SYDEQuest sprite assets**
+**Table 3: SYDEQUEST sprite assets**
 
 | Sprite | Preview |
 |--------|---------|
-| AlternatingWalk | ![AlternatingWalk](SydeQuest/assets/AlternatingWalk.png) |
-| Circle | ![Circle](SydeQuest/assets/Circle.png) |
-| CalcQuiz | ![CalcQuiz](SydeQuest/assets/CalcQuiz.png) |
-| FullTerrainSpriteSheet | ![FullTerrain](SydeQuest/assets/FullTerrainSpriteSheet.png) |
-| Energy | ![Energy](SydeQuest/assets/Energy.png) |
-| EnergyDrink | ![EnergyDrink](SydeQuest/assets/EnergyDrink.png) |
-| PortalSpriteSheet | ![Portal](SydeQuest/assets/PortalSpriteSheet.png) |
-| ScreenSprite | ![Screen](SydeQuest/assets/ScreenSprite.png) |
-| EnclosureSprite | ![Enclosure](SydeQuest/assets/EnclosureSprite.png) |
-| ChargerSprite | ![Charger](SydeQuest/assets/ChargerSprite.png) |
-| PartsSprite | ![Parts](SydeQuest/assets/PartsSprite.png) |
-| HapticSprite | ![Haptic](SydeQuest/assets/HapticSprite.png) |
-| PicoSprite | ![Pico](SydeQuest/assets/PicoSprite.png) |
-| Boss | ![Boss](SydeQuest/assets/Boss.png) |
-| Calvin Young | ![Calvin Young](SydeQuest/assets/Calvin%20Young.png) |
-| GameOver | ![GameOver](SydeQuest/assets/GameOver.png) |
-| IntegralSpinLeft | ![IntegralSpinLeft](SydeQuest/assets/IntegralSpinLeft.png) |
-| IntegralSpinRight | ![IntegralSpinRight](SydeQuest/assets/IntegralSpinRight.png) |
-| JumpSprite | ![JumpSprite](SydeQuest/assets/JumpSprite.png) |
-| PencilSpinLeft | ![PencilSpinLeft](SydeQuest/assets/PencilSpinLeft.png) |
-| PencilSpinRight | ![PencilSpinRight](SydeQuest/assets/PencilSpinRight.png) |
-| Robert Hunter | ![Robert Hunter](SydeQuest/assets/Robert%20Hunter.png) |
-| Rustball | ![Rustball](SydeQuest/assets/Rustball.png) |
-| RustShrapnel | ![RustShrapnel](SydeQuest/assets/RustShrapnel.png) |
-| SeanSpeziale | ![SeanSpeziale](SydeQuest/assets/SeanSpeziale.png) |
-| SYDEQuest | ![SYDEQuest](SydeQuest/assets/SYDEQuest.png) |
-| Trophy | ![Trophy](SydeQuest/assets/Trophy.png) |
+| AlternatingWalk | ![AlternatingWalk](assets/AlternatingWalk.png) |
+| Circle | ![Circle](assets/Circle.png) |
+| CalcQuiz | ![CalcQuiz](assets/CalcQuiz.png) |
+| FullTerrainSpriteSheet | ![FullTerrain](assets/FullTerrainSpriteSheet.png) |
+| Energy | ![Energy](assets/Energy.png) |
+| EnergyDrink | ![EnergyDrink](assets/EnergyDrink.png) |
+| PortalSpriteSheet | ![Portal](assets/PortalSpriteSheet.png) |
+| ScreenSprite | ![Screen](assets/ScreenSprite.png) |
+| EnclosureSprite | ![Enclosure](assets/EnclosureSprite.png) |
+| ChargerSprite | ![Charger](assets/ChargerSprite.png) |
+| PartsSprite | ![Parts](assets/PartsSprite.png) |
+| HapticSprite | ![Haptic](assets/HapticSprite.png) |
+| PicoSprite | ![Pico](assets/PicoSprite.png) |
+| Boss | ![Boss](assets/Boss.png) |
+| Calvin Young | ![Calvin Young](assets/Calvin%20Young.png) |
+| GameOver | ![GameOver](assets/GameOver.png) |
+| IntegralSpinLeft | ![IntegralSpinLeft](assets/IntegralSpinLeft.png) |
+| IntegralSpinRight | ![IntegralSpinRight](assets/IntegralSpinRight.png) |
+| JumpSprite | ![JumpSprite](assets/JumpSprite.png) |
+| PencilSpinLeft | ![PencilSpinLeft](assets/PencilSpinLeft.png) |
+| PencilSpinRight | ![PencilSpinRight](assets/PencilSpinRight.png) |
+| Robert Hunter | ![Robert Hunter](assets/Robert%20Hunter.png) |
+| Rustball | ![Rustball](assets/Rustball.png) |
+| RustShrapnel | ![RustShrapnel](assets/RustShrapnel.png) |
+| SeanSpeziale | ![SeanSpeziale](assets/SeanSpeziale.png) |
+| SYDEQUEST | ![SYDEQUEST](assets/SYDEQuest.png) |
+| Trophy | ![Trophy](assets/Trophy.png) |

@@ -1,4 +1,4 @@
-// Auto-generated from SYDEQuest.png
+// Auto-generated from SYDEQUEST.png
 #pragma once
 #include <cstdint>
 

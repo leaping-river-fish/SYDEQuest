@@ -748,7 +748,7 @@ int PicoRenderer::loadTexture(const char* path) {
     if (filenameEqCi(base, "ScreenSprite.png")) return 15;
     if (filenameEqCi(base, "PicoSprite.png")) return 16;
     if (filenameEqCi(base, "Boss.png")) return 17;
-    if (filenameEqCi(base, "SYDEQuest.png")) return 18;
+    if (filenameEqCi(base, "SYDEQUEST.png")) return 18;
     if (filenameEqCi(base, "SeanSpeziale.png")) return 19;
     if (filenameEqCi(base, "Robert Hunter.png")) return 20;
     if (filenameEqCi(base, "Calvin Young.png")) return 21;

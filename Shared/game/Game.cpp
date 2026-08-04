@@ -253,7 +253,7 @@ void Game::init() {
     screenSpritesheet = renderer->loadTexture("../assets/ScreenSprite.png");
     picoSpritesheet = renderer->loadTexture("../assets/PicoSprite.png");
     bossIconSpritesheet = renderer->loadTexture("../assets/Boss.png");
-    titleSpritesheet = renderer->loadTexture("../assets/SYDEQuest.png");
+    titleSpritesheet = renderer->loadTexture("../assets/SYDEQUEST.png");
     bossSeanSpritesheet = renderer->loadTexture("../assets/SeanSpeziale.png");
     bossLaserSpritesheet = renderer->loadTexture("../assets/Robert Hunter.png");
     bossCalvinSpritesheet = renderer->loadTexture("../assets/Calvin Young.png");
